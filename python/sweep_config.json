@@ -1,0 +1,591 @@
+{
+  "description": "Unified Configuration Presets for Conformal Database Production Sweeps",
+  "version": "1.0",
+  "presets": {
+    "dry_run": {
+      "name": "Dry Run Smoke Test",
+      "cal_seeds": 25,
+      "eval_seeds": 5,
+      "alphas": [0.01, 0.05, 0.10],
+      "dataset_scale": 1.0,
+      "queries": {
+        "q1a": {
+          "domain": "vision_coco",
+          "query_type": "flat",
+          "M_list": [10],
+          "z_list": [1.0],
+          "c_list": [1],
+          "k_list": [1],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (MutEx)",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (MutEx)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q1b": {
+          "domain": "text_jigsaw",
+          "query_type": "flat",
+          "M_list": [6],
+          "z_list": [1.0],
+          "c_list": [1],
+          "k_list": [1],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q2a": {
+          "domain": "vision_coco",
+          "query_type": "nested",
+          "M_list": [10],
+          "z_list": [1.0],
+          "c_list": [1],
+          "k_list": [1],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (MutEx)",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (MutEx)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q2b": {
+          "domain": "text_jigsaw",
+          "query_type": "nested",
+          "M_list": [6],
+          "z_list": [1.0],
+          "c_list": [1],
+          "k_list": [1],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q3": {
+          "domain": "relational_tpch_q3",
+          "query_type": "relational_sum_2table",
+          "M_list": [10],
+          "z_list": [1.0],
+          "c_list": [1],
+          "k_list": [1],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Sum_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q4": {
+          "domain": "relational_tpch_q10",
+          "query_type": "relational_sum_4table",
+          "M_list": [10],
+          "z_list": [1.0],
+          "c_list": [1],
+          "k_list": [1],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Sum_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        }
+      }
+    },
+    "paper_focused_quick": {
+      "name": "Fast Camera-Ready Paper Sweep (Quick Validation)",
+      "cal_seeds": 100,
+      "eval_seeds": 25,
+      "alphas": [0.01, 0.05, 0.10],
+      "dataset_scale": 0.5,
+      "queries": {
+        "q1a": {
+          "domain": "vision_coco",
+          "query_type": "flat",
+          "configs": [
+            [10, 0.5, 1],
+            [10, 1.0, 1],
+            [10, 2.0, 1],
+            [10, 1.0, 2],
+            [5, 1.0, 1]
+          ],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (MutEx)",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (MutEx)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q1b": {
+          "domain": "text_jigsaw",
+          "query_type": "flat",
+          "configs": [
+            [6, 0.5, 1],
+            [6, 1.0, 1],
+            [6, 2.0, 1],
+            [6, 1.0, 2],
+            [3, 1.0, 1]
+          ],
+          "k_list": [1, 3],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q2a": {
+          "domain": "vision_coco",
+          "query_type": "nested",
+          "configs": [
+            [10, 0.5, 1],
+            [10, 1.0, 1],
+            [10, 2.0, 1],
+            [10, 1.0, 2],
+            [5, 1.0, 1]
+          ],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (MutEx)",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (MutEx)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q2b": {
+          "domain": "text_jigsaw",
+          "query_type": "nested",
+          "configs": [
+            [6, 0.5, 1],
+            [6, 1.0, 1],
+            [6, 2.0, 1],
+            [6, 1.0, 2],
+            [3, 1.0, 1]
+          ],
+          "k_list": [1, 3],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q3": {
+          "domain": "relational_tpch_q3",
+          "query_type": "relational_sum_2table",
+          "configs": [
+            [10, 0.5, 1],
+            [10, 1.0, 1],
+            [10, 2.0, 1],
+            [10, 1.0, 2],
+            [10, 1.0, 3],
+            [10, 1.0, 5],
+            [25, 1.0, 1],
+            [50, 1.0, 1]
+          ],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Sum_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q4": {
+          "domain": "relational_tpch_q10",
+          "query_type": "relational_sum_4table",
+          "configs": [
+            [10, 0.5, 1],
+            [10, 1.0, 1],
+            [10, 2.0, 1],
+            [10, 1.0, 2],
+            [10, 1.0, 3],
+            [10, 1.0, 5],
+            [25, 1.0, 1],
+            [50, 1.0, 1]
+          ],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Sum_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        }
+      }
+    },
+    "paper_focused": {
+      "name": "Focused Camera-Ready Paper Sweep",
+      "cal_seeds": 500,
+      "eval_seeds": 100,
+      "alphas": [0.01, 0.025, 0.05, 0.075, 0.10],
+      "dataset_scale": 1.0,
+      "queries": {
+        "q1a": {
+          "domain": "vision_coco",
+          "query_type": "flat",
+          "configs": [
+            [10, 0.5, 1],
+            [10, 1.0, 1],
+            [10, 2.0, 1],
+            [10, 1.0, 2],
+            [5, 1.0, 1]
+          ],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (MutEx)",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (MutEx)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q1b": {
+          "domain": "text_jigsaw",
+          "query_type": "flat",
+          "configs": [
+            [6, 0.5, 1],
+            [6, 1.0, 1],
+            [6, 2.0, 1],
+            [6, 1.0, 2],
+            [3, 1.0, 1]
+          ],
+          "k_list": [1, 3],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q2a": {
+          "domain": "vision_coco",
+          "query_type": "nested",
+          "configs": [
+            [10, 0.5, 1],
+            [10, 1.0, 1],
+            [10, 2.0, 1],
+            [10, 1.0, 2],
+            [5, 1.0, 1]
+          ],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (MutEx)",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (MutEx)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q2b": {
+          "domain": "text_jigsaw",
+          "query_type": "nested",
+          "configs": [
+            [6, 0.5, 1],
+            [6, 1.0, 1],
+            [6, 2.0, 1],
+            [6, 1.0, 2],
+            [3, 1.0, 1]
+          ],
+          "k_list": [1, 3],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q3": {
+          "domain": "relational_tpch_q3",
+          "query_type": "relational_sum_2table",
+          "configs": [
+            [10, 0.5, 1],
+            [10, 1.0, 1],
+            [10, 2.0, 1],
+            [10, 1.0, 2],
+            [10, 1.0, 3],
+            [10, 1.0, 5],
+            [25, 1.0, 1],
+            [50, 1.0, 1]
+          ],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Sum_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q4": {
+          "domain": "relational_tpch_q10",
+          "query_type": "relational_sum_4table",
+          "configs": [
+            [10, 0.5, 1],
+            [10, 1.0, 1],
+            [10, 2.0, 1],
+            [10, 1.0, 2],
+            [10, 1.0, 3],
+            [10, 1.0, 5],
+            [25, 1.0, 1],
+            [50, 1.0, 1]
+          ],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Sum_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        }
+      }
+    },
+    "exhaustive_thesis": {
+      "name": "Exhaustive Factorial Thesis Sweep",
+      "cal_seeds": 1000,
+      "eval_seeds": 200,
+      "alphas": [0.01, 0.025, 0.05, 0.075, 0.10],
+      "dataset_scale": 1.0,
+      "queries": {
+        "q1a": {
+          "domain": "vision_coco",
+          "query_type": "flat",
+          "M_list": [5, 10],
+          "z_list": [0.5, 1.0, 2.0],
+          "c_list": [1, 2, 3],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (MutEx)",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (MutEx)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q1b": {
+          "domain": "text_jigsaw",
+          "query_type": "flat",
+          "M_list": [3, 6],
+          "z_list": [0.5, 1.0, 2.0],
+          "c_list": [1, 2, 3],
+          "k_list": [1, 3],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q2a": {
+          "domain": "vision_coco",
+          "query_type": "nested",
+          "M_list": [5, 10],
+          "z_list": [0.5, 1.0, 2.0],
+          "c_list": [1, 2, 3],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (MutEx)",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (MutEx)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q2b": {
+          "domain": "text_jigsaw",
+          "query_type": "nested",
+          "M_list": [3, 6],
+          "z_list": [0.5, 1.0, 2.0],
+          "c_list": [1, 2, 3],
+          "k_list": [1, 3],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q3": {
+          "domain": "relational_tpch_q3",
+          "query_type": "relational_sum_2table",
+          "M_list": [10, 25, 50],
+          "z_list": [0.5, 1.0, 2.0],
+          "c_list": [1, 2, 3, 5],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Sum_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q4": {
+          "domain": "relational_tpch_q10",
+          "query_type": "relational_sum_4table",
+          "M_list": [10, 25, 50],
+          "z_list": [0.5, 1.0, 2.0],
+          "c_list": [1, 2, 3, 5],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Sum_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        }
+      }
+    },
+    "canonical_v3": {
+      "name": "Canonical V3 User 2 Paper Sweep",
+      "cal_seeds": 100,
+      "eval_seeds": 25,
+      "alphas": [0.01, 0.05, 0.10],
+      "dataset_scale": 0.5,
+      "config_schema_note": "Configs are [M, z, c] (using preset dataset_scale=0.5) or [M, z, c, dataset_scale] where scale override allows Part d Database Size Linearity to run in the same unified sweep.",
+      "queries": {
+        "q1a": {
+          "domain": "vision_coco",
+          "query_type": "flat",
+          "configs": [
+            [10, 0.5, 1],
+            [10, 1.0, 1],
+            [10, 2.0, 1]
+          ],
+          "k_list": [1, 2, 3],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (MutEx)",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (MutEx)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q1b": {
+          "domain": "text_jigsaw",
+          "query_type": "flat",
+          "configs": [
+            [6, 0.5, 1],
+            [6, 1.0, 1],
+            [6, 2.0, 1]
+          ],
+          "k_list": [1, 2, 3],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q2a": {
+          "domain": "vision_coco",
+          "query_type": "nested",
+          "configs": [
+            [10, 0.5, 1],
+            [10, 1.0, 1],
+            [10, 2.0, 1]
+          ],
+          "k_list": [1, 2, 3],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (MutEx)",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (MutEx)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q2b": {
+          "domain": "text_jigsaw",
+          "query_type": "nested",
+          "configs": [
+            [6, 0.5, 1],
+            [6, 1.0, 1],
+            [6, 2.0, 1]
+          ],
+          "k_list": [1, 2, 3],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Count_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q3": {
+          "domain": "relational_tpch_q3",
+          "query_type": "relational_sum_2table",
+          "configs_comment": "Configs [10, z, 1] run at default 50% scale. Config [20, 1.0, 1, 1.0] runs the larger 100% scale setup (50,000 stream tuples, M=20 candidates) for Part d Database Size Linearity.",
+          "configs": [
+            [10, 0.5, 1],
+            [10, 1.0, 1],
+            [10, 2.0, 1],
+            [20, 1.0, 1, 1.0],
+            [20, 2.0, 1, 1.0]
+          ],
+          "k_list": [1, 3, 5, 7, 10, 12, 15],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Sum_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        },
+        "q4": {
+          "domain": "relational_tpch_q10",
+          "query_type": "relational_sum_4table",
+          "configs_comment": "Configs [10, z, 1] run at default 50% scale. Config [20, 1.0, 1, 1.0] runs the larger 100% scale setup (50,000 stream tuples, M=20 candidates) for Part d Database Size Linearity.",
+          "configs": [
+            [10, 0.5, 1],
+            [10, 1.0, 1],
+            [10, 2.0, 1],
+            [20, 1.0, 1, 1.0]
+          ],
+          "k_list": [1, 3, 5],
+          "strategies": [
+            "Naive_Conformal_End",
+            "MCDB_Sum_1000",
+            "Conformal_InOperator_Stop (Indep)",
+            "QN1_External_Pull (Indep)"
+          ]
+        }
+      }
+    },
+    "q3_extended_k_sweep": {
+      "name": "Q3 Extended Top-k Scaling Sweep (M=20, Scale 0.5)",
+      "cal_seeds": 100,
+      "eval_seeds": 25,
+      "alphas": [0.05],
+      "dataset_scale": 0.5,
+      "queries": {
+        "q3": {
+          "domain": "relational_tpch_q3",
+          "query_type": "relational_sum_2table",
+          "configs": [
+            [20, 1.0, 1, 0.5],
+            [20, 2.0, 1, 0.5]
+          ],
+          "k_list": [1, 3, 5, 7, 9, 10, 11, 13, 15, 17, 19, 20],
+          "strategies": [
+            "Naive",
+            "Conformal_InOperator_Stop"
+          ]
+        }
+      }
+    }
+  }
+}

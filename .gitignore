@@ -1,0 +1,22 @@
+# Rust build artifacts
+target/
+engine/target/
+**/*.rs.bk
+# Cargo.lock
+
+# Python cache & virtualenvs
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+
+# OS / Editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Benchmark runtime outputs (when re-run from scratch)
+results_production_*/

@@ -1,0 +1,182 @@
+{
+  "z05_c1": {
+    "config_name": "z05_c1",
+    "z_inter": 0.5,
+    "c_contenders": 1,
+    "n_partitions": 50,
+    "n_documents": 5000,
+    "n_seeds": 2,
+    "mean_win_fraction": 0.26,
+    "std_win_fraction": 0.020000000000000018,
+    "alpha_thresholds": {
+      "0.01": {
+        "target_coverage": 0.99,
+        "tau_min_win_fraction": 0.2404,
+        "tau_min_margin": 0.0402,
+        "min_feeds_required": 13
+      },
+      "0.05": {
+        "target_coverage": 0.95,
+        "tau_min_win_fraction": 0.242,
+        "tau_min_margin": 0.041,
+        "min_feeds_required": 13
+      },
+      "0.1": {
+        "target_coverage": 0.9,
+        "tau_min_win_fraction": 0.244,
+        "tau_min_margin": 0.042,
+        "min_feeds_required": 13
+      }
+    }
+  },
+  "z10_c1": {
+    "config_name": "z10_c1",
+    "z_inter": 1.0,
+    "c_contenders": 1,
+    "n_partitions": 50,
+    "n_documents": 5000,
+    "n_seeds": 2,
+    "mean_win_fraction": 0.63,
+    "std_win_fraction": 0.06999999999999995,
+    "alpha_thresholds": {
+      "0.01": {
+        "target_coverage": 0.99,
+        "tau_min_win_fraction": 0.5614,
+        "tau_min_margin": 0.3814,
+        "min_feeds_required": 29
+      },
+      "0.05": {
+        "target_coverage": 0.95,
+        "tau_min_win_fraction": 0.5670000000000001,
+        "tau_min_margin": 0.387,
+        "min_feeds_required": 29
+      },
+      "0.1": {
+        "target_coverage": 0.9,
+        "tau_min_win_fraction": 0.5740000000000001,
+        "tau_min_margin": 0.394,
+        "min_feeds_required": 29
+      }
+    }
+  },
+  "z20_c1": {
+    "config_name": "z20_c1",
+    "z_inter": 2.0,
+    "c_contenders": 1,
+    "n_partitions": 50,
+    "n_documents": 5000,
+    "n_seeds": 2,
+    "mean_win_fraction": 1.0,
+    "std_win_fraction": 0.0,
+    "alpha_thresholds": {
+      "0.01": {
+        "target_coverage": 0.99,
+        "tau_min_win_fraction": 1.0,
+        "tau_min_margin": 1.0,
+        "min_feeds_required": 50
+      },
+      "0.05": {
+        "target_coverage": 0.95,
+        "tau_min_win_fraction": 1.0,
+        "tau_min_margin": 1.0,
+        "min_feeds_required": 50
+      },
+      "0.1": {
+        "target_coverage": 0.9,
+        "tau_min_win_fraction": 1.0,
+        "tau_min_margin": 1.0,
+        "min_feeds_required": 50
+      }
+    }
+  },
+  "z05_c2": {
+    "config_name": "z05_c2",
+    "z_inter": 0.5,
+    "c_contenders": 2,
+    "n_partitions": 50,
+    "n_documents": 5000,
+    "n_seeds": 2,
+    "mean_win_fraction": 0.22999999999999998,
+    "std_win_fraction": 0.009999999999999995,
+    "alpha_thresholds": {
+      "0.01": {
+        "target_coverage": 0.99,
+        "tau_min_win_fraction": 0.2202,
+        "tau_min_margin": 0.0004,
+        "min_feeds_required": 12
+      },
+      "0.05": {
+        "target_coverage": 0.95,
+        "tau_min_win_fraction": 0.221,
+        "tau_min_margin": 0.002,
+        "min_feeds_required": 12
+      },
+      "0.1": {
+        "target_coverage": 0.9,
+        "tau_min_win_fraction": 0.222,
+        "tau_min_margin": 0.004,
+        "min_feeds_required": 12
+      }
+    }
+  },
+  "z10_c2": {
+    "config_name": "z10_c2",
+    "z_inter": 1.0,
+    "c_contenders": 2,
+    "n_partitions": 50,
+    "n_documents": 5000,
+    "n_seeds": 2,
+    "mean_win_fraction": 0.62,
+    "std_win_fraction": 0.040000000000000036,
+    "alpha_thresholds": {
+      "0.01": {
+        "target_coverage": 0.99,
+        "tau_min_win_fraction": 0.5808,
+        "tau_min_margin": 0.3618,
+        "min_feeds_required": 30
+      },
+      "0.05": {
+        "target_coverage": 0.95,
+        "tau_min_win_fraction": 0.584,
+        "tau_min_margin": 0.369,
+        "min_feeds_required": 30
+      },
+      "0.1": {
+        "target_coverage": 0.9,
+        "tau_min_win_fraction": 0.588,
+        "tau_min_margin": 0.378,
+        "min_feeds_required": 30
+      }
+    }
+  },
+  "z20_c2": {
+    "config_name": "z20_c2",
+    "z_inter": 2.0,
+    "c_contenders": 2,
+    "n_partitions": 50,
+    "n_documents": 5000,
+    "n_seeds": 2,
+    "mean_win_fraction": 0.75,
+    "std_win_fraction": 0.030000000000000027,
+    "alpha_thresholds": {
+      "0.01": {
+        "target_coverage": 0.99,
+        "tau_min_win_fraction": 0.7206,
+        "tau_min_margin": 0.4414,
+        "min_feeds_required": 37
+      },
+      "0.05": {
+        "target_coverage": 0.95,
+        "tau_min_win_fraction": 0.723,
+        "tau_min_margin": 0.447,
+        "min_feeds_required": 37
+      },
+      "0.1": {
+        "target_coverage": 0.9,
+        "tau_min_win_fraction": 0.726,
+        "tau_min_margin": 0.454,
+        "min_feeds_required": 37
+      }
+    }
+  }
+}
