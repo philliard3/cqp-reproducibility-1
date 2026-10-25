@@ -124,7 +124,7 @@ bash scripts/run_production_sweep.sh paper_focused [output_dir] --cal-seeds 1000
 python3 python/run_production_sweep.py --preset paper_focused --queries q3,q4 --cal-seeds 500 --eval-seeds 100
 ```
 
-*(Note: The full 25,200-invocation multi-hour canonical grid sweep is pre-compiled and bundled under `data/reference_results/canonical_v3/` for instant reproduction of all paper figures in Step 3).*
+*(Note: The full 25,200-invocation multi-hour canonical grid sweep is pre-compiled and bundled under `data/reference_results/canonical_v3/` for instant reproduction of all paper figures in Step 3. For packaging commands and instructions to `scp` and execute detached overnight sweeps on a remote AWS/Linux server, see [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md#6-remote-server-deployment--overnight-runs)).*
 
 ---
 

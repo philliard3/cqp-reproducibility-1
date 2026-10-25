@@ -140,24 +140,96 @@ Reviewers can verify each major claim in the manuscript against the generated ar
 
 ---
 
-## 5. Re-running Sweeps from Scratch (Optional)
+## 5. Multi-Scale Experimental Sweeps
 
-If evaluators wish to generate fresh benchmark data from scratch rather than reading bundled reference logs:
+Evaluators can execute fresh benchmark sweeps across 5 scale presets or specify dynamic seed counts. Calibration seeds start at `1,000,000` and evaluation seeds start at `2,000,000` to guarantee disjoint PRNG sampling across arbitrarily large runs:
 
+| Scale Tier | Calib Seeds ($N_{\text{cal}}$) | Eval Seeds ($N_{\text{eval}}$) | Error Resolution ($1 / N_{\text{eval}}$) | Approx Runtime | Recommended Target |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| `scale_smoke` | 5 | 1 | N/A (Sanity check) | ~15 seconds | Deployment preflight / CI verification |
+| `scale_normal` | 100 | 25 | 4.0% | ~15–25 minutes | Fast statistical check |
+| `scale_long` | 500 | 100 | 1.0% | ~2–3 hours | High-resolution evaluation |
+| `scale_extended` | 1,000 | 200 | 0.5% | ~5–7 hours | Overnight statistical audit |
+| `scale_hyper` | 2,000 | 500 | 0.2% | ~12–14 hours | Exhaustive finite-sample verification |
+
+### Running Preset Tiers
 ```bash
-# 1. Quick Dry-Run (< 1 minute):
-bash scripts/run_production_sweep.sh dry_run
+# Smoke test sweep (~15 seconds):
+bash scripts/run_production_sweep.sh scale_smoke
 
-# 2. Paper-Focused Representative Sweep (~20 minutes):
-bash scripts/run_production_sweep.sh paper_focused
+# Overnight audit sweep (~5-7 hours):
+bash scripts/run_production_sweep.sh scale_extended results_extended_sweep
+```
 
-# 3. Render figures from fresh sweep:
-bash scripts/generate_paper_charts.sh results_production_<timestamp>
+### Dynamic Seed Overrides
+Evaluators can also customize seed counts on any workload:
+```bash
+# E.g. 500 calibration runs and 100 evaluation runs on paper_focused workload:
+bash scripts/run_production_sweep.sh paper_focused results_custom --cal-seeds 500 --eval-seeds 100
 ```
 
 ---
 
-## 6. Troubleshooting & Support
+## 6. Remote Server Deployment & Overnight Runs
+
+To deploy this repository onto a remote evaluation machine (e.g., AWS `g6e.xlarge` or Linux compute node) and execute an overnight sweep:
+
+### Step 1: Package on Local Machine
+Create a clean distribution archive excluding local build artifacts, virtual environments, and git metadata:
+```bash
+tar --exclude="engine/target" \
+    --exclude=".venv" \
+    --exclude="python/**/__pycache__" \
+    --exclude=".git" \
+    --exclude="results_*" \
+    --exclude=".DS_Store" \
+    -czf cqp_evaluator_package.tar.gz cqp-reproducibility-1/
+```
+
+### Step 2: Transfer to Remote Machine via `scp`
+```bash
+scp -i ~/.ssh/your_key.pem cqp_evaluator_package.tar.gz ubuntu@<server-ip>:~/
+```
+
+### Step 3: Unpack & Set Up on Remote Server
+```bash
+ssh -i ~/.ssh/your_key.pem ubuntu@<server-ip>
+
+# Extract archive
+tar -xzf cqp_evaluator_package.tar.gz
+cd cqp-reproducibility-1
+
+# Automated setup (compiles Rust release engine, verifies/creates .venv)
+bash scripts/setup_env.sh
+
+# Fast sanity verification (< 1 second)
+bash scripts/run_smoke_test.sh
+```
+
+### Step 4: Launch Overnight Sweep in Detached Session
+Use `nohup` or `tmux` so network disconnection does not interrupt the run:
+```bash
+# Option A: With nohup
+nohup bash scripts/run_production_sweep.sh scale_extended results_overnight > sweep.log 2>&1 &
+echo $! > sweep.pid
+
+# Monitor progress:
+tail -f sweep.log
+
+# Option B: With tmux
+tmux new -s cqp_sweep
+bash scripts/run_production_sweep.sh scale_extended results_overnight
+# (Press Ctrl+B then D to detach; reconnect later with: tmux attach -t cqp_sweep)
+```
+
+### Step 5: Render Figures from the Completed Sweep
+```bash
+bash scripts/generate_paper_charts.sh results_overnight figures_overnight
+```
+
+---
+
+## 7. Troubleshooting & Support
 
 - **Cargo build fails**: Ensure Rust $\ge 1.70$ is installed via `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`.
 - **Python package import errors**: Run `bash scripts/setup_env.sh` to ensure packages are installed in the local `.venv`.
