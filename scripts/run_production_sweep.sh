@@ -24,14 +24,34 @@ PYTHON_DIR="$PACKAGE_DIR/python"
 ENGINE_DIR="$PACKAGE_DIR/engine"
 DATA_DIR="$PACKAGE_DIR/data"
 
-PRESET="${1:-paper_focused}"
-OUTPUT_DIR="${2:-$PACKAGE_DIR/results_production_$(date +%Y%m%d_%H%M%S)}"
+PRESET="paper_focused"
+OUTPUT_DIR=""
+EXTRA_ARGS=()
+
+if [ "$#" -ge 1 ] && [[ "$1" != --* ]]; then
+    PRESET="$1"
+    shift
+fi
+
+if [ "$#" -ge 1 ] && [[ "$1" != --* ]]; then
+    OUTPUT_DIR="$1"
+    shift
+fi
+
+EXTRA_ARGS=("$@")
+
+if [ -z "$OUTPUT_DIR" ]; then
+    OUTPUT_DIR="$PACKAGE_DIR/results_production_$(date +%Y%m%d_%H%M%S)"
+fi
 
 echo "=============================================================================="
 echo " Conformal Query Processing (CQP) — Production Experimental Sweep"
 echo " (Human Operator Mode: Interactive Production Orchestration)"
 echo " Preset:     $PRESET"
 echo " Output Dir: $OUTPUT_DIR"
+if [ "${#EXTRA_ARGS[@]}" -gt 0 ]; then
+    echo " Extra Flags:${EXTRA_ARGS[*]}"
+fi
 echo "=============================================================================="
 
 # 2. Environment Preflight
@@ -46,11 +66,6 @@ if [[ "$PRESET" == *"smoke"* ]] || [[ "$PRESET" == "dry_run" ]]; then
 else
     echo "Press Ctrl+C within 5 seconds to cancel, or wait to continue..."
     sleep 5
-fi
-
-EXTRA_ARGS=()
-if [ "$#" -ge 3 ]; then
-    EXTRA_ARGS=("${@:3}")
 fi
 
 if [ -f "$PACKAGE_DIR/.venv/bin/python" ]; then
