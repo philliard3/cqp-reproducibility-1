@@ -185,7 +185,7 @@ def run_relational_tpch_sweep(
     """
     import shutil
     if eval_seeds is None:
-        eval_seeds = list(range(2000, 2005))
+        eval_seeds = list(range(2_000_000, 2_000_005))
     if engine_bin_dir is None:
         engine_bin_dir = REPO_ROOT / "mode_u_engine" / "target" / "release"
     if codec is None:
@@ -407,7 +407,7 @@ def main():
         c_list=c_list,
         k_list=k_list,
         alphas=alphas,
-        cal_seeds=list(range(1000, 1025)),
+        cal_seeds=list(range(1_000_000, 1_000_025)),
         engine_bin_dir=Path(args.engine_bin_dir),
         codec=codec,
         profiler=profiler,

@@ -55,8 +55,10 @@ def run_orchestrated_sweep(
 
     num_cal = override_cal_seeds if override_cal_seeds is not None else preset_cfg.get("cal_seeds", 25)
     num_eval = override_eval_seeds if override_eval_seeds is not None else preset_cfg.get("eval_seeds", 5)
-    cal_seeds = list(range(1000, 1000 + num_cal))
-    eval_seeds = list(range(2000, 2000 + num_eval))
+    CAL_SEED_START = 1_000_000
+    EVAL_SEED_START = 2_000_000
+    cal_seeds = list(range(CAL_SEED_START, CAL_SEED_START + num_cal))
+    eval_seeds = list(range(EVAL_SEED_START, EVAL_SEED_START + num_eval))
 
     print("==========================================================================")
     print(f" Conformal Database Sweep Orchestrator: Preset [{preset_name}]")

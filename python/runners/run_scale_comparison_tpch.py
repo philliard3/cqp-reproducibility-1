@@ -74,8 +74,10 @@ def main():
     print("=" * 70 + "\n")
 
     combined_records = []
-    cal_seeds_list = list(range(1000, 1000 + args.cal_seeds))
-    eval_seeds_list = list(range(2000, 2000 + args.eval_seeds))
+    CAL_SEED_START = 1_000_000
+    EVAL_SEED_START = 2_000_000
+    cal_seeds_list = list(range(CAL_SEED_START, CAL_SEED_START + args.cal_seeds))
+    eval_seeds_list = list(range(EVAL_SEED_START, EVAL_SEED_START + args.eval_seeds))
 
     for q in args.queries:
         print(f"\n>>> [{time.strftime('%H:%M:%S')}] Starting evaluation for query {q.upper()} at scale {args.scale}...")

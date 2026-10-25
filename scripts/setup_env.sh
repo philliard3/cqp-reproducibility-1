@@ -27,7 +27,12 @@ echo "✓ Mode U Query Engine release binaries built successfully."
 
 # 2. Verify Python environment
 echo ">>> [2/4] Verifying Python environment..."
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+if [ -f "$PACKAGE_DIR/.venv/bin/python" ]; then
+    PYTHON_BIN="$PACKAGE_DIR/.venv/bin/python"
+else
+    PYTHON_BIN="${PYTHON_BIN:-python3}"
+fi
+
 if ! command -v "$PYTHON_BIN" &> /dev/null; then
     echo "ERROR: '$PYTHON_BIN' is required but not found in PATH." >&2
     exit 1
@@ -35,18 +40,24 @@ fi
 echo "Python version: $($PYTHON_BIN --version)"
 
 echo "Checking required Python packages..."
-$PYTHON_BIN -c "
+if ! "$PYTHON_BIN" -c "
 import numpy
 import scipy
 import pandas
 import matplotlib
 import seaborn
-print('✓ All core Python packages verified (NumPy, SciPy, Pandas, Matplotlib, Seaborn).')
-" || {
-    echo "WARNING: Some required Python packages are missing."
-    echo "Installing requirements from python/requirements.txt..."
-    $PYTHON_BIN -m pip install -r "$PACKAGE_DIR/python/requirements.txt"
-}
+" 2>/dev/null; then
+    echo "Notice: Some required Python packages are missing in current environment."
+    if [ ! -d "$PACKAGE_DIR/.venv" ]; then
+        echo "Creating localized virtual environment at .venv..."
+        "$PYTHON_BIN" -m venv "$PACKAGE_DIR/.venv" || python3 -m venv "$PACKAGE_DIR/.venv"
+    fi
+    PYTHON_BIN="$PACKAGE_DIR/.venv/bin/python"
+    echo "Installing requirements into .venv using $PACKAGE_DIR/.venv/bin/pip..."
+    "$PACKAGE_DIR/.venv/bin/pip" install -q --upgrade pip
+    "$PACKAGE_DIR/.venv/bin/pip" install -q -r "$PACKAGE_DIR/python/requirements.txt"
+fi
+echo "✓ All core Python packages verified (NumPy, SciPy, Pandas, Matplotlib, Seaborn)."
 
 # 3. Verify Cached Data Assets
 echo ">>> [3/4] Checking frozen base tables and calibration artifacts..."

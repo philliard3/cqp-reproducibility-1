@@ -53,9 +53,15 @@ if [ "$#" -ge 3 ]; then
     EXTRA_ARGS=("${@:3}")
 fi
 
+if [ -f "$PACKAGE_DIR/.venv/bin/python" ]; then
+    PYTHON_BIN="$PACKAGE_DIR/.venv/bin/python"
+else
+    PYTHON_BIN="${PYTHON_BIN:-python3}"
+fi
+
 # 4. Dispatch Production Orchestrator
 echo ">>> Starting master production sweep orchestrator..."
-python3 "$PYTHON_DIR/run_production_sweep.py" \
+"$PYTHON_BIN" "$PYTHON_DIR/run_production_sweep.py" \
     --preset "$PRESET" \
     --config "$PYTHON_DIR/sweep_config.json" \
     --output-dir "$OUTPUT_DIR" \

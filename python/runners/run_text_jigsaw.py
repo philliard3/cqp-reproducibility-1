@@ -87,9 +87,9 @@ def run_text_jigsaw_sweep(
     if profiler is None:
         profiler = SweepProfiler("text_jigsaw_sweep")
     if cal_seeds is None:
-        cal_seeds = list(range(1000, 1025))
+        cal_seeds = list(range(1_000_000, 1_000_025))
     if eval_seeds is None:
-        eval_seeds = list(range(2000, 2005))
+        eval_seeds = list(range(2_000_000, 2_000_005))
     if configs_list is None:
         configs_list = [[6, 1.0, 1]]
 

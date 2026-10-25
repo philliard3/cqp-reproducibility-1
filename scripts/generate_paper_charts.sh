@@ -29,6 +29,12 @@ echo "==========================================================================
 
 mkdir -p "$OUTPUT_DIR"
 
+if [ -f "$PACKAGE_DIR/.venv/bin/python" ]; then
+    PYTHON_BIN="$PACKAGE_DIR/.venv/bin/python"
+else
+    PYTHON_BIN="${PYTHON_BIN:-python3}"
+fi
+
 # 1. Generate Table 1 Statistical Coverage & Recall Validation
 if [ -f "$INPUT_DIR/unified_sweep_results.jsonl.gz" ]; then
     echo ">>> Generating Table 1 Coverage & Recall Validation..."
@@ -36,14 +42,14 @@ if [ -f "$INPUT_DIR/unified_sweep_results.jsonl.gz" ]; then
     if [ -f "$INPUT_DIR/schema_lookup.json" ]; then
         LOOKUP_ARG="--lookup $INPUT_DIR/schema_lookup.json"
     fi
-    python3 "$PYTHON_DIR/analyze_results.py" \
+    "$PYTHON_BIN" "$PYTHON_DIR/analyze_results.py" \
         --results "$INPUT_DIR/unified_sweep_results.jsonl.gz" \
         $LOOKUP_ARG \
         --output-dir "$OUTPUT_DIR/tables" || true
 fi
 
 # 2. Render Figures across all parts and profiles (paper & presentation)
-python3 "$PYTHON_DIR/generate_paper_charts_v3.py" \
+"$PYTHON_BIN" "$PYTHON_DIR/generate_paper_charts_v3.py" \
     --results-dir "$INPUT_DIR" \
     --figures-dir "$OUTPUT_DIR"
 

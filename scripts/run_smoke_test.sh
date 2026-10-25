@@ -28,7 +28,12 @@ echo "✓ Rust engine unit tests passed (13/13 invariant tests ok)."
 # 3. Run Python End-to-End Smoke Test (<5s)
 echo ""
 echo ">>> Running End-to-End Micro Smoke Tests..."
-python3 "$PACKAGE_DIR/tests/test_smoke_end_to_end.py"
+if [ -f "$PACKAGE_DIR/.venv/bin/python" ]; then
+    PYTHON_BIN="$PACKAGE_DIR/.venv/bin/python"
+else
+    PYTHON_BIN="${PYTHON_BIN:-python3}"
+fi
+"$PYTHON_BIN" "$PACKAGE_DIR/tests/test_smoke_end_to_end.py"
 
 echo ""
 echo "=============================================================================="
