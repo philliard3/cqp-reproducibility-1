@@ -90,21 +90,39 @@ Instantly re-hydrates the bundled audited canonical dataset (26,400 runs) and re
 
 ---
 
-## 5. Live Benchmark Evaluation (Optional)
+## 5. Live Multi-Scale Benchmark Evaluation (Optional)
 
-To verify that the Volcano engine and conformal operators execute live queries and stream data on your system:
+To verify that the Volcano engine and conformal operators execute live queries and stream data on your system, the framework supports evaluation across **5 configurable scaling tiers**:
 
-### Quick End-to-End Dry Run (< 1 Minute)
+| Scaling Tier | Preset Name | Calib Seeds | Eval Seeds | Est. Runtime | Statistical Power & Purpose |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| **Smoke Probe** | `scale_smoke` | 5 | 1 | < 15 sec | Instant sanity check verifying deployment, compilers, and streaming pipelines. |
+| **Normal** | `scale_normal` | 100 | 25 | ~15–25 min | Paper baseline replication across representative query parameters. |
+| **Long** | `scale_long` | 500 | 100 | ~2–3 hrs | **1.0% empirical error resolution**; robust evening validation of statistical bounds. |
+| **Extended** | `scale_extended` | 1,000 | 200 | ~5–7 hrs | **0.5% empirical error resolution**; standard overnight verification run. |
+| **Hyper-Extended** | `scale_hyper` | 2,000 | 500 | ~12–14 hrs | **0.2% empirical error resolution**; high-precision overnight cluster sweep. |
+
+### Running a Preset Scale Tier:
 ```bash
-bash scripts/run_production_sweep.sh dry_run [output_dir]
-```
-Executes a rapid multi-query sweep across 2 seeds and verifies the complete query engine and telemetry pipeline.
+# 1. Quick deployment probe (< 15 seconds):
+bash scripts/run_production_sweep.sh scale_smoke [output_dir]
 
-### Paper-Focused Representative Sweep (~15–20 Minutes)
-```bash
-bash scripts/run_production_sweep.sh paper_focused [output_dir]
+# 2. Canonical paper replication (~20 minutes):
+bash scripts/run_production_sweep.sh scale_normal [output_dir]
+
+# 3. High-confidence overnight sweep (~5 hours):
+bash scripts/run_production_sweep.sh scale_extended [output_dir]
 ```
-Executes representative evaluations for all 6 queries across key paper parameters.
+
+### Custom Scaling via CLI Flags:
+You can also override calibration and evaluation runs on any preset dynamically:
+```bash
+# Example: 1,000 calibration seeds and 200 eval seeds on paper queries
+bash scripts/run_production_sweep.sh paper_focused [output_dir] --cal-seeds 1000 --eval-seeds 200
+
+# Or target specific queries (e.g. Q3 and Q4 only):
+python3 python/run_production_sweep.py --preset paper_focused --queries q3,q4 --cal-seeds 500 --eval-seeds 100
+```
 
 *(Note: The full 25,200-invocation multi-hour canonical grid sweep is pre-compiled and bundled under `data/reference_results/canonical_v3/` for instant reproduction of all paper figures in Step 3).*
 

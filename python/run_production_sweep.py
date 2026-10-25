@@ -37,6 +37,8 @@ def run_orchestrated_sweep(
     cache_dir: Path,
     engine_bin_dir: Path,
     selected_queries: Optional[List[str]] = None,
+    override_cal_seeds: Optional[int] = None,
+    override_eval_seeds: Optional[int] = None,
 ):
     total_start = time.time()
     profiler = SweepProfiler(f"orchestrated_{preset_name}")
@@ -51,11 +53,18 @@ def run_orchestrated_sweep(
     preset_cfg = config_data["presets"][preset_name]
     output_base_dir.mkdir(parents=True, exist_ok=True)
 
+    num_cal = override_cal_seeds if override_cal_seeds is not None else preset_cfg.get("cal_seeds", 25)
+    num_eval = override_eval_seeds if override_eval_seeds is not None else preset_cfg.get("eval_seeds", 5)
+    cal_seeds = list(range(1000, 1000 + num_cal))
+    eval_seeds = list(range(2000, 2000 + num_eval))
+
     print("==========================================================================")
     print(f" Conformal Database Sweep Orchestrator: Preset [{preset_name}]")
-    print(f" Output Directory: {output_base_dir}")
-    print(f" Cache Directory:  {cache_dir}")
-    print(f" Target Alphas:    {preset_cfg.get('alphas')}")
+    print(f" Output Directory:    {output_base_dir}")
+    print(f" Cache Directory:     {cache_dir}")
+    print(f" Target Alphas:       {preset_cfg.get('alphas')}")
+    print(f" Calibration Seeds:   {len(cal_seeds)} runs (seeds {cal_seeds[0]}..{cal_seeds[-1]})")
+    print(f" Evaluation Seeds:    {len(eval_seeds)} runs (seeds {eval_seeds[0]}..{eval_seeds[-1]})")
     print("==========================================================================")
 
     # 1. Dataset Preflight Verification Step
@@ -75,8 +84,6 @@ def run_orchestrated_sweep(
     # 2. Modular Runner Dispatch
     queries_cfg = preset_cfg.get("queries", {})
     alphas = preset_cfg.get("alphas", [0.01, 0.05, 0.10])
-    cal_seeds = list(range(1000, 1000 + preset_cfg.get("cal_seeds", 25)))
-    eval_seeds = list(range(2000, 2000 + preset_cfg.get("eval_seeds", 5)))
     dataset_scale = float(preset_cfg.get("dataset_scale", 1.0))
     unified_records: List[Dict[str, Any]] = []
 
@@ -253,21 +260,10 @@ def run_orchestrated_sweep(
     except Exception as e:
         print(f"Notice: analyze_results.py finished or skipped with: {e}")
 
-    try:
-        subprocess.run([
-            sys.executable,
-            str(PACKAGE_DIR / "generate_charts.py"),
-            "--results", str(unified_log_path),
-            "--lookup", str(output_base_dir / "schema_lookup.json"),
-            "--output-dir", str(output_base_dir / "figures"),
-        ], check=True)
-    except Exception as e:
-        print(f"Notice: generate_charts.py finished or skipped with: {e}")
-
-    # If running canonical_v3, also render V3 paper figures automatically
-    if preset_name == "canonical_v3" and (PACKAGE_DIR / "generate_paper_charts_v3.py").exists():
+    # Render publication figures if chart renderer exists
+    if (PACKAGE_DIR / "generate_paper_charts_v3.py").exists():
         try:
-            print("\n>>> Generating Canonical V3 Publication Figures...")
+            print("\n>>> Generating Publication Figures...")
             subprocess.run([
                 sys.executable,
                 str(PACKAGE_DIR / "generate_paper_charts_v3.py"),
@@ -321,14 +317,47 @@ def main():
         "--preset",
         type=str,
         default="dry_run",
-        help="Preset name from sweep_config.json (e.g. canonical_v3, paper_focused_quick, dry_run, paper_focused, exhaustive_thesis)",
+        help="Preset name from sweep_config.json (e.g. canonical_v3, paper_focused_quick, dry_run, paper_focused, exhaustive_thesis, scale_smoke, scale_normal, scale_long, scale_extended, scale_hyper)",
+    )
+    parser.add_argument(
+        "--scale-tier",
+        type=str,
+        default=None,
+        choices=["smoke", "normal", "long", "extended", "hyper"],
+        help="Predefined scale tier shorthand: smoke (5 cal, 1 eval), normal (100 cal, 25 eval), long (500 cal, 100 eval), extended (1000 cal, 200 eval), hyper (2000 cal, 500 eval)",
+    )
+    parser.add_argument(
+        "--cal-seeds",
+        type=int,
+        default=None,
+        help="Explicitly override number of calibration seeds (e.g. 5, 100, 500, 1000, 2000)",
+    )
+    parser.add_argument(
+        "--eval-seeds",
+        type=int,
+        default=None,
+        help="Explicitly override number of evaluation seeds (e.g. 1, 25, 100, 200, 500)",
     )
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--output-dir", type=str, default=str(PACKAGE_DIR / "results"))
-    parser.add_argument("--cache-dir", type=str, default=str(REPO_ROOT / "experiment_datasets" / "production_cache"))
+    parser.add_argument("--cache-dir", type=str, default=str(REPO_ROOT / "data" / "cached_tables"))
     parser.add_argument("--engine-bin-dir", type=str, default=None)
     parser.add_argument("--queries", type=str, default=None, help="Comma-separated query filter, e.g. q1a,q2a,q3")
     args = parser.parse_args()
+
+    SCALE_TIERS = {
+        "smoke": (5, 1),
+        "normal": (100, 25),
+        "long": (500, 100),
+        "extended": (1000, 200),
+        "hyper": (2000, 500),
+    }
+    tier_cal, tier_eval = (None, None)
+    if args.scale_tier:
+        tier_cal, tier_eval = SCALE_TIERS[args.scale_tier]
+
+    effective_cal = args.cal_seeds if args.cal_seeds is not None else tier_cal
+    effective_eval = args.eval_seeds if args.eval_seeds is not None else tier_eval
 
     q_filter = [q.strip() for q in args.queries.split(",")] if args.queries else None
     run_orchestrated_sweep(
@@ -338,6 +367,8 @@ def main():
         cache_dir=Path(args.cache_dir),
         engine_bin_dir=resolve_engine_bin_dir(args.engine_bin_dir),
         selected_queries=q_filter,
+        override_cal_seeds=effective_cal,
+        override_eval_seeds=effective_eval,
     )
 
 

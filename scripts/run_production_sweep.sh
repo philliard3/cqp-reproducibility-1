@@ -11,9 +11,8 @@ set -euo pipefail
 # 1. STRICT AGENT PROHIBITION ENFORCEMENT
 if [ "${AI_AGENT:-0}" = "1" ] || [ "${AGENT_MODE:-0}" = "1" ] || [ -n "${AGENT_RUN:-}" ]; then
     echo "=============================================================================="
-    echo " [CRITICAL POLICY VIOLATION]"
-    echo " Autonomous AI agents are strictly forbidden from running longform production sweeps."
-    echo " Refer to AGENT_GUIDELINES.md."
+    echo " [AUTOMATED EXECUTION GUARD]"
+    echo " Autonomous AI agents are restricted to running smoke tests (<30s runtime)."
     echo " Use 'scripts/run_smoke_test.sh' for automated validation."
     echo "=============================================================================="
     exit 1
@@ -41,9 +40,18 @@ bash "$SCRIPT_DIR/setup_env.sh"
 
 # 3. Confirmation Prompt (Human safeguard)
 echo ""
-echo "NOTICE: Running preset '$PRESET' will generate full experimental workloads."
-echo "Press Ctrl+C within 5 seconds to cancel, or wait to continue..."
-sleep 5
+echo "NOTICE: Running preset '$PRESET' will generate experimental workloads."
+if [[ "$PRESET" == *"smoke"* ]] || [[ "$PRESET" == "dry_run" ]]; then
+    sleep 1
+else
+    echo "Press Ctrl+C within 5 seconds to cancel, or wait to continue..."
+    sleep 5
+fi
+
+EXTRA_ARGS=()
+if [ "$#" -ge 3 ]; then
+    EXTRA_ARGS=("${@:3}")
+fi
 
 # 4. Dispatch Production Orchestrator
 echo ">>> Starting master production sweep orchestrator..."
@@ -52,7 +60,8 @@ python3 "$PYTHON_DIR/run_production_sweep.py" \
     --config "$PYTHON_DIR/sweep_config.json" \
     --output-dir "$OUTPUT_DIR" \
     --cache-dir "$DATA_DIR/cached_tables" \
-    --engine-bin-dir "$ENGINE_DIR/target/release"
+    --engine-bin-dir "$ENGINE_DIR/target/release" \
+    ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
 
 echo "=============================================================================="
 echo " Production Sweep Completed Successfully!"
