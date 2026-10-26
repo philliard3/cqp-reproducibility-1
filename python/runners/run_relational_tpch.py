@@ -210,18 +210,20 @@ def run_relational_tpch_sweep(
             z_val = float(cfg[1])
             c_val = int(cfg[2])
             sc_val = float(cfg[3]) if len(cfg) > 3 else dataset_scale
-            resolved_configs.append((m_val, z_val, c_val, sc_val))
+            k_override = cfg[4] if len(cfg) > 4 and isinstance(cfg[4], list) else None
+            resolved_configs.append((m_val, z_val, c_val, sc_val, k_override))
     else:
-        resolved_configs = [(M, z, c, dataset_scale) for M in M_list for z in z_list for c in c_list]
+        resolved_configs = [(M, z, c, dataset_scale, None) for M in M_list for z in z_list for c in c_list]
 
     total_configs = len(resolved_configs)
-    for cfg_idx, (M, z, c, cur_scale) in enumerate(resolved_configs, 1):
+    for cfg_idx, (M, z, c, cur_scale, k_override) in enumerate(resolved_configs, 1):
+        active_k_list = k_override if k_override is not None else k_list
         cfg_tag = f"M{M}_z{int(round(z*100)):03d}_c{c}"
         if cur_scale != dataset_scale:
             cfg_tag += f"_scale{int(round(cur_scale*100)):03d}"
         pct_cfg = (cfg_idx / total_configs) * 100.0
         print(f"\n=======================================================", flush=True)
-        print(f"[{query} Configuration {cfg_idx}/{total_configs} ({pct_cfg:.1f}%)] {cfg_tag} (scale={cur_scale})", flush=True)
+        print(f"[{query} Configuration {cfg_idx}/{total_configs} ({pct_cfg:.1f}%)] {cfg_tag} (scale={cur_scale}, k_list={active_k_list})", flush=True)
         print(f"=======================================================", flush=True)
         calib_summary_path = output_dir / f"calib_summary_{cfg_tag}.json"
 
@@ -233,7 +235,7 @@ def run_relational_tpch_sweep(
             M=M,
             z=z,
             c=c,
-            target_k_list=k_list,
+            target_k_list=active_k_list,
             alphas=alphas,
             out_summary_path=calib_summary_path,
             scale=cur_scale,
@@ -262,7 +264,7 @@ def run_relational_tpch_sweep(
                 print(f"    [Eval Gen Progress: {pct:5.1f}% | {s_idx+1:>3}/{len(eval_seeds)}] {query} (M={M}, z={z:.1f}, c={c})", flush=True)
 
         # 3. Evaluate across each (k, alpha) combination (once across all evaluation datasets)
-        for k in k_list:
+        for k in active_k_list:
             baseline_k_records = []
             for a_idx, a in enumerate(alphas):
                 eval_json_out = output_dir / f"eval_{cfg_tag}_k{k}_a{int(round(a*100)):02d}.json"

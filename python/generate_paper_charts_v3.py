@@ -1143,7 +1143,7 @@ def plot_part_b_topk(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
     save_figure(fig, out_dir / "part_b" / "fig2g_followup_savings_and_delta_w_scatter", profile)
 
     # --- Fig 2h: Q3 M=20 Savings and Delta W Scatter (2-Panel, Grouped Means) ---
-    q3_m20_cqp = df[(df["query"] == "q3") & (df["M"] == 20) & (df["dataset_scale"] == 0.5) & (df["strategy"] == "CQP")].copy()
+    q3_m20_cqp = df[(df["query"] == "q3") & (df["M"] == 20) & (df["dataset_scale"] == m20_scale_val) & (df["strategy"] == "CQP")].copy()
     if not q3_m20_cqp.empty:
         delta_w_m20 = []
         ratio_w_m20 = []
@@ -1418,8 +1418,9 @@ def plot_part_b_topk(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
     for idx, cfg in enumerate(slice_configs):
         r_idx, c_idx = idx // 2, idx % 2
         ax = axes[r_idx, c_idx]
+        scale_target = m20_scale_val if cfg["M"] == 20 else 0.5
         sub = df[(df["query"] == cfg["query"]) & (df["M"] == cfg["M"]) & (df["z"] == cfg["z"]) & 
-                 (df["dataset_scale"] == 0.5) & (df["strategy"] == "CQP")].copy()
+                 (df["dataset_scale"] == scale_target) & (df["strategy"] == "CQP")].copy()
         if sub.empty:
             continue
         dws = []
@@ -1460,8 +1461,9 @@ def plot_part_b_topk(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
     for idx, cfg in enumerate(slice_configs):
         r_idx, c_idx = idx // 2, idx % 2
         ax = axes[r_idx, c_idx]
+        scale_target = m20_scale_val if cfg["M"] == 20 else 0.5
         sub = df[(df["query"] == cfg["query"]) & (df["M"] == cfg["M"]) & (df["z"] == cfg["z"]) & 
-                 (df["dataset_scale"] == 0.5) & (df["strategy"] == "CQP") & (df["k"] < cfg["M"])].copy()
+                 (df["dataset_scale"] == scale_target) & (df["strategy"] == "CQP") & (df["k"] < cfg["M"])].copy()
         if sub.empty:
             continue
         dws = []
@@ -1504,8 +1506,9 @@ def plot_part_b_topk(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
     for idx, cfg in enumerate(slice_configs):
         r_idx, c_idx = idx // 2, idx % 2
         ax = axes[r_idx, c_idx]
+        scale_target = m20_scale_val if cfg["M"] == 20 else 0.5
         sub = df[(df["query"] == cfg["query"]) & (df["M"] == cfg["M"]) & (df["z"] == cfg["z"]) & 
-                 (df["dataset_scale"] == 0.5) & (df["strategy"] == "CQP") & (df["k"] < cfg["M"])].copy()
+                 (df["dataset_scale"] == scale_target) & (df["strategy"] == "CQP") & (df["k"] < cfg["M"])].copy()
         if sub.empty:
             continue
         ratios_list = []
