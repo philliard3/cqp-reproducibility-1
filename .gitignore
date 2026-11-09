@@ -20,3 +20,4 @@ Thumbs.db
 
 # Benchmark runtime outputs (when re-run from scratch)
 results_production_*/
+**/presentation

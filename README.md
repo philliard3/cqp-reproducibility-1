@@ -15,11 +15,11 @@ This repository provides the official, complete, and reproducible implementation
 
 Conformal Query Processing (CQP) pushes distribution-free conformal calibration directly into the physical tuple iterator (`next()` / `pull()`) of a Volcano query engine. By evaluating dynamic interval bounds ($\hat{L}_g, \hat{U}_g$) during stream consumption, CQP stops stream ingestion as early as the top-$k$ set is statistically guaranteed to contain the true winners with probability $\ge 1 - \alpha$.
 
-### Summary of Empirical Findings (Canonical V3 Suite: 25,200 Invocations, 562.5M Tuples):
+### Summary of Empirical Findings (Production Canonical Suite: 238,200 Invocations, 4.65B Tuples):
 - **Speedup vs. Sequential Baseline**: **$1.2\times$ to $8.1\times$** faster end-to-end execution across vision, text, and relational join workloads.
 - **Speedup vs. Monte Carlo Baselines (MCDB-1000)**: **$5.4\times$ to $26\times$** faster than optimized 1,000-world vectorized Monte Carlo database simulation.
 - **Stream Ingestion Savings**: **$85\%$ to $92.5\%$** reduction in stream reads for flat and nested monitoring queries; **$10.6\%$ to $47.1\%$** reduction for continuous revenue multi-table joins.
-- **Statistical Coverage Compliance**: **$100.0\%$ empirical validity** ($\ge 1 - \alpha$) across all 1,032 evaluated parameter configurations ($\alpha \in \{0.01, 0.05, 0.10\}$) with **zero violations**.
+- **Statistical Coverage Compliance**: **$100.0\%$ empirical validity** ($\ge 1 - \alpha$) across all 1,161 evaluated parameter configurations ($\alpha \in \{0.01, 0.05, 0.10\}$) with **zero violations**.
 - **Ablation Insight**: At $k \ge 2$, external pull coordinators experience **pruning collapse** ($0.0\%$ savings, running slower than baseline), whereas CQP's in-operator pushdown sustains $\sim 87\%$ savings regardless of $k$.
 
 ---
@@ -34,8 +34,10 @@ The benchmark suite evaluates six representative query archetypes across three d
 | **Q1b** | Text | Jigsaw Toxicity (Borkan et al.) | Twitter-RoBERTa + Platt Scaling | 6 | Open-World Independent Bernoulli | Flat (0 Joins) |
 | **Q2a** | Vision | MS COCO 2017 Val | YOLOv8n + Platt Scaling | 10 | 2-Stage Nested Day $\to$ Global Winner | Windowed (0 Joins) |
 | **Q2b** | Text | Jigsaw Toxicity | Twitter-RoBERTa + Platt Scaling | 6 | 2-Stage Nested Day $\to$ Global Winner | Windowed (0 Joins) |
-| **Q3**  | Relational | TPC-H Schema (Rev 3.0) | $p \sim \text{Beta}(0.5, 0.5)$ | 10 | Top-$k$ Continuous Revenue Sum | 2 Joins: $(\text{Cust} \bowtie \text{Orders}) \bowtie \text{Line}$ |
-| **Q4**  | Relational | TPC-H Schema | $p \sim \text{Beta}(0.5, 0.5)$ | 10 | Top-$k$ Lost Revenue Sum | 3 Joins: $(\text{Cust} \bowtie \text{Orders} \bowtie \text{Line}) \bowtie \text{Nation}$ |
+| **Q3**  | Relational | TPC-H Schema (Rev 3.0) | Zipf Skew ($z \in \{0.5, 1.0, 2.0\}$); Uniform $p(o) \sim U[0.10, 0.99]$ | 10 | Top-$k$ Continuous Revenue Sum | 2 Joins: $(\text{Cust} \bowtie \text{Orders}) \bowtie \text{Line}$ |
+| **Q4**  | Relational | TPC-H Schema | Zipf Skew ($z \in \{0.5, 1.0, 2.0\}$); Uniform $p_{\text{ret}} \sim U[0.10, 0.95]$ | 10 | Top-$k$ Lost Revenue Sum | 3 Joins: $(\text{Cust} \bowtie \text{Orders} \bowtie \text{Line}) \bowtie \text{Nation}$ |
+
+> **Distribution Modeling Note**: While group-level revenue totals follow a parameterized Zipfian distribution ($z \in \{0.5, 1.0, 2.0\}$) to evaluate performance across varying degrees of data skew, synthetic uncertainty attributes strictly adhere to standard benchmark specifications: order existence probability $p(o) \sim U[0.10, 0.99]$, lineitem return probability $p_{\text{ret}} \sim U[0.10, 0.95]$, and discrete lineitem branching $U[1, 7]$ matching canonical TPC-H Section 4.2.2.13.
 
 ---
 

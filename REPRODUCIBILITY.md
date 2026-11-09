@@ -112,16 +112,16 @@ Reviewers can verify each major claim in the manuscript against the generated ar
 
 ### Claim 3: Top-k Dynamics, The U-Curve & Log-Gap Linearization ($M=20$)
 - **Paper Location**: § Top-k Scaling Dynamics, Figure 5.
-- **Verification Artifact**: Open `figures_v3/paper/part_b/fig2g_q3_m20_savings_and_delta_w_log_grouped.pdf`.
+- **Verification Artifact**: Open `figures_v3/paper/part_b/fig2g_q3_m20_savings_and_delta_w_log_grouped.pdf` (or `..._clean.pdf`).
 - **Expected Observations**:
   1. **Panel (a) U-Curve**: High savings at $k=1\text{--}3$ ($16.6\%\text{--}17.5\%$), dipping in the mid-rank valley ($k=7\text{--}15$ at $0.7\%\text{--}2.5\%$), and recovering as $k \to 20$ ($4.9\%\text{--}6.4\%$).
-  2. **Panel (b) Linearization**: Strong linear correlation between stream savings and $\log(W_k - W_{k+1})$ ($r = 0.868$ for $z=1.0$, $r = 0.936$ for $z=2.0$, $p < 10^{-5}$). Across all evaluated workloads, the bare difference $\Delta W_k$ averages $r = 0.63$ correlation with stream savings.
+  2. **Panel (b) Linearization**: Strong linear correlation between stream savings and $\log(W_k - W_{k+1})$ ($r = 0.966$ for $z=1.0$, $r = 0.973$ for $z=2.0$, $p < 10^{-3}$). Across all evaluated workloads, the bare difference $\Delta W_k$ averages $r = 0.63$ correlation with stream savings.
 
 ---
 
 ### Claim 4: Ablation Studies (Mutual Exclusion & In-Operator Stopping)
 - **Paper Location**: § Ablation Studies, Figure 6.
-- **Verification Artifact**: Open `figures_v3/paper/part_e/fig5_strategy_ablation_dual_panel.pdf`.
+- **Verification Artifact**: Open `figures_v3/paper/part_e/fig5_strategy_ablation_dual_panel.pdf` and `figures_v3/paper/part_e/fig5e_k_comparison_query_strip_subset_na_bar.pdf`.
 - **Expected Observations**:
   - **Mutual Exclusion Reasoning**: Toggling mutual exclusion reasoning on nested vision queries (COCO Q2a) demonstrates that MutEx reasoning is **$55\%\text{--}62\%$ faster** than without.
   - **In-Operator Stopping vs External Pull**:
@@ -135,7 +135,7 @@ Reviewers can verify each major claim in the manuscript against the generated ar
 - **Paper Location**: § Conformal Set Validity, Table 1.
 - **Verification Artifact**: Open `figures_v3/tables/table_1_coverage_validation.md`.
 - **Expected Observations**:
-  - Across all 1,032 parameter configurations and all $\alpha \in \{0.01, 0.05, 0.10\}$:
+  - Across all 1,161 parameter configurations and all $\alpha \in \{0.01, 0.05, 0.10\}$:
     $$\text{Empirical Coverage} \ge \text{Target Coverage} \quad (100.0\%\text{ compliance, 0 violations}).$$
 
 ---
