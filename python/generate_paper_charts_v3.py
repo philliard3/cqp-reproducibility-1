@@ -36,6 +36,7 @@ Implements all User 2 recommendations and fixes:
 import os
 import sys
 import json
+import shutil
 import argparse
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
@@ -96,21 +97,21 @@ STRATEGY_STYLES = {
         "hatch": "..",
         "edgecolor": "black",
         "linewidth": 0.8,
-        "label": "MutEx (Closed-World)",
+        "label": "MutEx",
     },
     "Indep": {
         "color": PALETTE["indep"],
         "hatch": "--",
         "edgecolor": "black",
         "linewidth": 0.8,
-        "label": "Indep (Open-World)",
+        "label": "Indep",
     },
     "In-Op Stop": {
         "color": PALETTE["in_op_stop"],
         "hatch": "//",
         "edgecolor": "black",
         "linewidth": 0.8,
-        "label": "In-Operator Stop",
+        "label": "In-Operator",
     },
     "External Pull": {
         "color": PALETTE["external_pull"],
@@ -126,8 +127,8 @@ CAPABILITY_ORDER = [
     "Baseline",
     "External Pull + Indep",
     "External Pull + MutEx",
-    "In-Operator Pull + Indep",
-    "In-Operator Pull + MutEx",
+    "In-Operator + Indep",
+    "In-Operator + MutEx",
 ]
 
 CAPABILITY_STYLES = {
@@ -152,19 +153,19 @@ CAPABILITY_STYLES = {
         "linewidth": 0.8,
         "label": "External Pull + MutEx",
     },
-    "In-Operator Pull + Indep": {
+    "In-Operator + Indep": {
         "color": "#1f77b4",
         "hatch": "//",
         "edgecolor": "black",
         "linewidth": 0.8,
-        "label": "In-Operator Pull + Indep",
+        "label": "In-Operator + Indep",
     },
-    "In-Operator Pull + MutEx": {
+    "In-Operator + MutEx": {
         "color": "#2ca02c",
         "hatch": "..",
         "edgecolor": "black",
         "linewidth": 0.8,
-        "label": "In-Operator Pull + MutEx",
+        "label": "In-Operator + MutEx",
     },
 }
 
@@ -190,13 +191,13 @@ def map_capability_strategy(query: str, raw_strat: str) -> Optional[str]:
     if is_external and is_mutex:
         return "External Pull + MutEx"
     if is_in_op and is_indep:
-        return "In-Operator Pull + Indep"
+        return "In-Operator + Indep"
     if is_in_op and is_mutex:
-        return "In-Operator Pull + MutEx"
+        return "In-Operator + MutEx"
 
     if query in ["q3", "q4"]:
         if is_in_op:
-            return "In-Operator Pull + Indep"
+            return "In-Operator + Indep"
         if is_external:
             return "External Pull + Indep"
 
@@ -415,17 +416,29 @@ def save_figure(fig, out_path_base: Path, profile: str):
     plt.close(fig)
 
 
+def save_figure_multi(fig, out_dir: Path, base_name: str, suffixes: List[str], profile: str):
+    """Saves figure to the primary base path and copies to any alias suffixes."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    primary_base = out_dir / f"{base_name}{suffixes[0]}"
+    save_figure(fig, primary_base, profile)
+    for sfx in suffixes[1:]:
+        alias_base = out_dir / f"{base_name}{sfx}"
+        shutil.copyfile(primary_base.with_suffix(".pdf"), alias_base.with_suffix(".pdf"))
+        shutil.copyfile(primary_base.with_suffix(".png"), alias_base.with_suffix(".png"))
+
+
 # =========================================================================
 # PART A: Representative Performance Strip (k=3, z in {0.5, 1.0, 2.0}, alpha=0.05)
 # =========================================================================
 
 def plot_part_a_representative(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
-    """Generates Part a figures: 6-panel strip, shared Y-axis, normalized speedup/time/saved, and parity correlation."""
+    """Generates Part a figures: 6-panel strip, shared Y-axis, normalized speedup/time/saved, and parity correlation.
+    Also produces separated variations for (Q1a, Q1b, Q2a, Q2b) [Perception] and (Q3, Q4) [Relational]."""
     setup_v3_style(profile)
     # Filter to canonical M per query at representative scale 0.5
-    queries = ["q1a", "q1b", "q2a", "q2b", "q3", "q4"]
+    all_queries = ["q1a", "q1b", "q2a", "q2b", "q3", "q4"]
     slice_parts = []
-    for q in queries:
+    for q in all_queries:
         m_val = CANONICAL_M[q]
         q_slice = df[(df["query"] == q) & (df["M"] == m_val) & (df["k"] == 3) & (df["alpha"] == 0.05) & (df["dataset_scale"] == 0.5)]
         slice_parts.append(q_slice)
@@ -437,7 +450,6 @@ def plot_part_a_representative(df: pd.DataFrame, out_dir: Path, profile: str = "
     canonical_strats = ["MCDB-1000", "Baseline", "CQP"]
 
     # Canonical legend handles strictly ordered: MCDB-1000 -> Baseline -> CQP
-    import matplotlib.patches as mpatches
     ordered_handles = [
         mpatches.Patch(
             facecolor=STRATEGY_STYLES[s]["color"],
@@ -449,373 +461,825 @@ def plot_part_a_representative(df: pd.DataFrame, out_dir: Path, profile: str = "
     ]
     ordered_labels = [STRATEGY_STYLES[s]["label"] for s in canonical_strats]
 
-    # --- Fig 1a: Representative Latency Strip (Full including MCDB-1000) ---
-    fig, axes = plt.subplots(1, 6, figsize=(18, 2.9), sharey=False)
-    plt.subplots_adjust(bottom=0.32, wspace=0.34, top=0.88)
-
-    for idx, q in enumerate(queries):
-        ax = axes[idx]
-        q_df = slice_df[slice_df["query"] == q]
-        q_name = QUERY_INFO[q]["name"]
-
-        grouped = q_df.groupby(["z", "strategy"])["engine_time_ms"].agg(["mean", "sem"]).reset_index()
-        x = np.arange(len(z_vals))
-        bar_w = 0.19
-
-        for s_idx, s in enumerate(canonical_strats):
-            s_data = grouped[grouped["strategy"] == s]
-            s_style = STRATEGY_STYLES[s]
-            means = []
-            sems = []
-            for z in z_vals:
-                row = s_data[s_data["z"] == z]
-                if not row.empty:
-                    means.append(row["mean"].values[0])
-                    sems.append(row["sem"].values[0] if not pd.isna(row["sem"].values[0]) else 0.0)
-                elif s == "Baseline" and (q, z) in baseline_map:
-                    means.append(baseline_map[(q, z)])
-                    sems.append(0.0)
-                elif s == "MCDB-1000" and (q, z) in mcdb_map:
-                    means.append(mcdb_map[(q, z)])
-                    sems.append(0.0)
-                else:
-                    means.append(0.0)
-                    sems.append(0.0)
-
-            offset = (s_idx - 1) * bar_w
-            ax.bar(
-                x + offset, means, yerr=sems, width=bar_w,
-                color=s_style["color"], hatch=s_style["hatch"],
-                edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
-                capsize=2.5,
-            )
-
-        ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"z={z}" for z in z_vals], fontsize=13)
-        if idx == 0:
-            ax.set_ylabel("Execution Time (ms)", fontsize=15)
-
-    fig.legend(
-        ordered_handles, ordered_labels,
-        loc="lower center", ncol=3, frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
-    )
-    save_figure(fig, out_dir / "part_a" / "fig1a_representative_latency_strip", profile)
-
-    # --- Fig 1a Focused: Baseline vs CQP Only (Zoomed into CQP Skew Dynamics) ---
-    fig_f, axes_f = plt.subplots(1, 6, figsize=(18, 2.9), sharey=False)
-    plt.subplots_adjust(bottom=0.32, wspace=0.34, top=0.88)
-    focused_strats = ["Baseline", "CQP"]
-    focused_handles = [
-        mpatches.Patch(
-            facecolor=STRATEGY_STYLES[s]["color"],
-            hatch=STRATEGY_STYLES[s]["hatch"],
-            edgecolor=STRATEGY_STYLES[s]["edgecolor"],
-            linewidth=STRATEGY_STYLES[s]["linewidth"],
-        )
-        for s in focused_strats
+    # Query groups: 6-panel combined, 4-panel Perception (Q1a-Q2b), and 2-panel Relational (Q3-Q4)
+    query_groups = [
+        ("all", all_queries, [""]),
+        ("perception", ["q1a", "q1b", "q2a", "q2b"], ["_perception", "_q1_q2"]),
+        ("relational", ["q3", "q4"], ["_relational", "_q3_q4"]),
     ]
-    focused_labels = [STRATEGY_STYLES[s]["label"] for s in focused_strats]
 
-    for idx, q in enumerate(queries):
-        ax = axes_f[idx]
-        q_df = slice_df[slice_df["query"] == q]
-        q_name = QUERY_INFO[q]["name"]
+    # Helper for group geometry
+    def get_group_geom(n_q: int, shared_y: bool = False):
+        if n_q == 6:
+            figsize = (18, 2.9)
+            left_pad = 0.05
+            wspace = 0.16 if shared_y else 0.34
+        elif n_q == 4:
+            figsize = (12.5, 3.1)
+            left_pad = 0.08
+            wspace = 0.18 if shared_y else 0.32
+        else:  # n_q == 2
+            figsize = (7.0, 3.1)
+            left_pad = 0.14
+            wspace = 0.20 if shared_y else 0.35
+        return figsize, left_pad, wspace
 
-        grouped = q_df.groupby(["z", "strategy"])["engine_time_ms"].agg(["mean", "sem"]).reset_index()
-        x = np.arange(len(z_vals))
-        bar_w_f = 0.28
+    def format_speedup(sp: float) -> str:
+        if sp <= 0 or np.isnan(sp) or np.isinf(sp):
+            return ""
+        if sp < 2.0:
+            return f"{sp:.2f}x"
+        return f"{sp:.1f}x"
 
-        for s_idx, s in enumerate(focused_strats):
-            s_data = grouped[grouped["strategy"] == s]
-            s_style = STRATEGY_STYLES[s]
-            means = []
-            sems = []
-            for z in z_vals:
-                row = s_data[s_data["z"] == z]
-                if not row.empty:
-                    means.append(row["mean"].values[0])
-                    sems.append(row["sem"].values[0] if not pd.isna(row["sem"].values[0]) else 0.0)
-                elif s == "Baseline" and (q, z) in baseline_map:
-                    means.append(baseline_map[(q, z)])
-                    sems.append(0.0)
-                else:
-                    means.append(0.0)
-                    sems.append(0.0)
+    def get_anno_fontsize(n_q: int, profile: str) -> float:
+        if profile == "presentation":
+            return 10.0 if n_q == 6 else (11.5 if n_q == 4 else 12.5)
+        else:
+            return 8.5 if n_q == 6 else (10.0 if n_q == 4 else 11.0)
 
-            offset = (s_idx - 0.5) * bar_w_f
-            ax.bar(
-                x + offset, means, yerr=sems, width=bar_w_f,
-                color=s_style["color"], hatch=s_style["hatch"],
-                edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
-                capsize=2.5,
-            )
+    def get_variant_suffixes(base_suffixes: List[str], variant: Optional[int]) -> List[str]:
+        if variant is None:
+            return base_suffixes
+        res = []
+        for sfx in base_suffixes:
+            res.append(f"{sfx}_v{variant}")
+            res.append(f"{sfx}_speedup_v{variant}")
+        return res
 
-        ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"z={z}" for z in z_vals], fontsize=13)
-        if idx == 0:
-            ax.set_ylabel("Execution Time (ms)", fontsize=15)
+    for variant in [None, 1, 2]:
+        # --- Fig 1a: Representative Latency Strip (Full including MCDB-1000) ---
+        for grp_name, grp_queries, base_suffixes in query_groups:
+            suffixes = get_variant_suffixes(base_suffixes, variant)
+            n_q = len(grp_queries)
+            figsize, left_pad, wspace = get_group_geom(n_q, shared_y=False)
+            fig, axes = plt.subplots(1, n_q, figsize=figsize, sharey=False)
+            if n_q == 1:
+                axes = [axes]
+            plt.subplots_adjust(bottom=0.32, wspace=wspace, top=0.88, left=left_pad, right=0.98)
 
-    fig_f.legend(
-        focused_handles, focused_labels,
-        loc="lower center", ncol=2, frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
-    )
-    save_figure(fig_f, out_dir / "part_a" / "fig1a_baseline_vs_cqp_strip", profile)
+            has_mcdb = any((q, z) in mcdb_map for q in grp_queries for z in z_vals)
+            grp_strats = canonical_strats if has_mcdb else [s for s in canonical_strats if s != "MCDB-1000"]
+            grp_handles = [
+                mpatches.Patch(
+                    facecolor=STRATEGY_STYLES[s]["color"],
+                    hatch=STRATEGY_STYLES[s]["hatch"],
+                    edgecolor=STRATEGY_STYLES[s]["edgecolor"],
+                    linewidth=STRATEGY_STYLES[s]["linewidth"],
+                )
+                for s in grp_strats
+            ]
+            grp_labels = [STRATEGY_STYLES[s]["label"] for s in grp_strats]
+            bar_w = 0.19 if len(grp_strats) == 3 else 0.28
+            fs = get_anno_fontsize(n_q, profile)
 
-    # --- Fig 1b: Representative Shared Y-Axis ---
-    fig, axes = plt.subplots(1, 6, figsize=(18, 2.9), sharey=True)
-    plt.subplots_adjust(bottom=0.32, wspace=0.16, top=0.88)
-    for idx, q in enumerate(queries):
-        ax = axes[idx]
-        q_df = slice_df[slice_df["query"] == q]
-        q_name = QUERY_INFO[q]["name"]
-        grouped = q_df.groupby(["z", "strategy"])["engine_time_ms"].agg(["mean", "sem"]).reset_index()
-        x = np.arange(len(z_vals))
-        bar_w = 0.19
+            for idx, q in enumerate(grp_queries):
+                ax = axes[idx]
+                q_df = slice_df[slice_df["query"] == q]
+                q_name = QUERY_INFO[q]["name"]
 
-        for s_idx, s in enumerate(canonical_strats):
-            s_data = grouped[grouped["strategy"] == s]
-            s_style = STRATEGY_STYLES[s]
-            means = []
-            sems = []
-            for z in z_vals:
-                row = s_data[s_data["z"] == z]
-                if not row.empty:
-                    means.append(row["mean"].values[0])
-                    sems.append(row["sem"].values[0] if not pd.isna(row["sem"].values[0]) else 0.0)
-                elif s == "Baseline" and (q, z) in baseline_map:
-                    means.append(baseline_map[(q, z)])
-                    sems.append(0.0)
-                elif s == "MCDB-1000" and (q, z) in mcdb_map:
-                    means.append(mcdb_map[(q, z)])
-                    sems.append(0.0)
-                else:
-                    means.append(0.0)
-                    sems.append(0.0)
+                grouped = q_df.groupby(["z", "strategy"])["engine_time_ms"].agg(["mean", "sem"]).reset_index()
+                x = np.arange(len(z_vals))
 
-            offset = (s_idx - 1) * bar_w
-            ax.bar(
-                x + offset, means, yerr=sems, width=bar_w,
-                color=s_style["color"], hatch=s_style["hatch"],
-                edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
-                capsize=2.5,
-            )
+                strat_means = {}
+                strat_sems = {}
+                for s_idx, s in enumerate(grp_strats):
+                    s_data = grouped[grouped["strategy"] == s]
+                    s_style = STRATEGY_STYLES[s]
+                    means = []
+                    sems = []
+                    for z in z_vals:
+                        row = s_data[s_data["z"] == z]
+                        if not row.empty:
+                            means.append(row["mean"].values[0])
+                            sems.append(row["sem"].values[0] if not pd.isna(row["sem"].values[0]) else 0.0)
+                        elif s == "Baseline" and (q, z) in baseline_map:
+                            means.append(baseline_map[(q, z)])
+                            sems.append(0.0)
+                        elif s == "MCDB-1000" and (q, z) in mcdb_map:
+                            means.append(mcdb_map[(q, z)])
+                            sems.append(0.0)
+                        else:
+                            means.append(0.0)
+                            sems.append(0.0)
 
-        ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"z={z}" for z in z_vals], fontsize=13)
-        if idx == 0:
-            ax.set_ylabel("Execution Time (ms)", fontsize=15)
+                    strat_means[s] = means
+                    strat_sems[s] = sems
 
-    fig.legend(
-        ordered_handles, ordered_labels,
-        loc="lower center", ncol=3, frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
-    )
-    save_figure(fig, out_dir / "part_a" / "fig1b_representative_shared_axis", profile)
-
-    # --- Fig 1c Version 1: Normalized Speedup Ratio (T_base / T, higher is better) ---
-    fig, axes = plt.subplots(1, 6, figsize=(18, 2.9), sharey=False)
-    plt.subplots_adjust(bottom=0.32, wspace=0.34, top=0.88)
-    for idx, q in enumerate(queries):
-        ax = axes[idx]
-        q_df = slice_df[slice_df["query"] == q]
-        q_name = QUERY_INFO[q]["name"]
-        grouped = q_df.groupby(["z", "strategy"])["engine_time_ms"].mean().reset_index()
-        x = np.arange(len(z_vals))
-        bar_w = 0.19
-
-        for s_idx, s in enumerate(canonical_strats):
-            s_data = grouped[grouped["strategy"] == s]
-            s_style = STRATEGY_STYLES[s]
-            speedups = []
-            for z_i, z in enumerate(z_vals):
-                t_base = baseline_map.get((q, z), 1.0)
-                row = s_data[s_data["z"] == z]
-                if not row.empty:
-                    t_strat = row["engine_time_ms"].values[0]
-                elif s == "Baseline":
-                    t_strat = t_base
-                elif s == "MCDB-1000" and (q, z) in mcdb_map:
-                    t_strat = mcdb_map[(q, z)]
-                else:
-                    t_strat = 0.0
-                sp = (t_base / t_strat) if t_strat > 0 else 0.0
-                speedups.append(sp)
-
-            offset = (s_idx - 1) * bar_w
-            bars = ax.bar(
-                x + offset, speedups, width=bar_w,
-                color=s_style["color"], hatch=s_style["hatch"],
-                edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
-            )
-
-            # Annotate raw milliseconds on Baseline bars
-            if s == "Baseline":
-                for z_i, z in enumerate(z_vals):
-                    raw_ms = baseline_map.get((q, z), 0.0)
-                    ax.text(
-                        x[z_i] + offset, 1.05, f"{raw_ms:.0f}ms",
-                        ha="center", va="bottom", fontsize=11.5, color="#333333"
+                    offset = (s_idx - (len(grp_strats) - 1) / 2.0) * bar_w
+                    ax.bar(
+                        x + offset, means, yerr=sems, width=bar_w,
+                        color=s_style["color"], hatch=s_style["hatch"],
+                        edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
+                        capsize=2.5,
                     )
 
-        ax.axhline(1.0, color="#666666", linestyle=":", linewidth=1.0)
-        ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"z={z}" for z in z_vals], fontsize=13)
-        if idx == 0:
-            ax.set_ylabel("Speedup Ratio (T_base / T)", fontsize=15)
+                all_vals = [m for m_list in strat_means.values() for m in m_list if m > 0]
+                max_h = max(all_vals) if all_vals else 1.0
+                y_pad = max_h * 0.025
 
-    fig.legend(
-        ordered_handles, ordered_labels,
-        loc="lower center", ncol=3, frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
-    )
-    save_figure(fig, out_dir / "part_a" / "fig1c_normalized_speedup", profile)
+                if variant in (1, 2):
+                    for s_idx, s in enumerate(grp_strats):
+                        offset = (s_idx - (len(grp_strats) - 1) / 2.0) * bar_w
+                        for z_i, z in enumerate(z_vals):
+                            t_mcdb = mcdb_map.get((q, z), 0.0)
+                            t_base = baseline_map.get((q, z), strat_means.get("Baseline", [0.0] * len(z_vals))[z_i])
+                            t_cqp = strat_means.get("CQP", [0.0] * len(z_vals))[z_i]
 
-    # --- Fig 1c Version 2: Normalized Execution Time (T / T_base, Baseline = 1.0) ---
-    fig, axes = plt.subplots(1, 6, figsize=(18, 2.9), sharey=True)
-    plt.subplots_adjust(bottom=0.32, wspace=0.16, top=0.88)
-    for idx, q in enumerate(queries):
-        ax = axes[idx]
-        q_df = slice_df[slice_df["query"] == q]
-        q_name = QUERY_INFO[q]["name"]
-        grouped = q_df.groupby(["z", "strategy"])["engine_time_ms"].mean().reset_index()
-        x = np.arange(len(z_vals))
-        bar_w = 0.19
+                            if s == "Baseline":
+                                if t_base > 0 and t_mcdb > 0:
+                                    sp = t_mcdb / t_base
+                                    top_y = strat_means[s][z_i] + strat_sems[s][z_i]
+                                    ax.text(
+                                        x[z_i] + offset, top_y + y_pad, format_speedup(sp),
+                                        ha="center", va="bottom", fontsize=fs, fontweight="bold", color="#333333"
+                                    )
+                            elif s == "CQP":
+                                sp = 0.0
+                                if variant == 1 and t_cqp > 0 and t_base > 0:
+                                    sp = t_base / t_cqp
+                                elif variant == 2 and t_cqp > 0 and t_mcdb > 0:
+                                    sp = t_mcdb / t_cqp
+                                if sp > 0:
+                                    top_y = strat_means[s][z_i] + strat_sems[s][z_i]
+                                    ax.text(
+                                        x[z_i] + offset, top_y + y_pad, format_speedup(sp),
+                                        ha="center", va="bottom", fontsize=fs, fontweight="bold", color="#333333"
+                                    )
+                    ax.set_ylim(0, max_h * 1.25)
 
-        for s_idx, s in enumerate(canonical_strats):
-            s_data = grouped[grouped["strategy"] == s]
-            s_style = STRATEGY_STYLES[s]
-            norm_times = []
-            for z_i, z in enumerate(z_vals):
-                t_base = baseline_map.get((q, z), 1.0)
-                row = s_data[s_data["z"] == z]
-                if not row.empty:
-                    t_strat = row["engine_time_ms"].values[0]
-                elif s == "Baseline":
-                    t_strat = t_base
-                elif s == "MCDB-1000" and (q, z) in mcdb_map:
-                    t_strat = mcdb_map[(q, z)]
-                else:
-                    t_strat = 0.0
-                norm_t = (t_strat / t_base) if t_base > 0 else 0.0
-                norm_times.append(norm_t)
+                ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
+                ax.set_xticks(x)
+                ax.set_xticklabels([f"z={z}" for z in z_vals], fontsize=13)
+                if idx == 0:
+                    ax.set_ylabel("Execution Time (ms)", fontsize=15)
 
-            offset = (s_idx - 1) * bar_w
-            bars = ax.bar(
-                x + offset, norm_times, width=bar_w,
-                color=s_style["color"], hatch=s_style["hatch"],
-                edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
+            fig.legend(
+                grp_handles, grp_labels,
+                loc="lower center", ncol=len(grp_strats), frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
             )
+            save_figure_multi(fig, out_dir / "part_a", "fig1a_representative_latency_strip", suffixes, profile)
 
-            # Annotate raw milliseconds on Baseline bars
-            if s == "Baseline":
-                for z_i, z in enumerate(z_vals):
-                    raw_ms = baseline_map.get((q, z), 0.0)
-                    ax.text(
-                        x[z_i] + offset, 1.05, f"{raw_ms:.0f}ms",
-                        ha="center", va="bottom", fontsize=11.5, color="#333333"
+        # --- Fig 1a Focused: Baseline vs CQP Only (Zoomed into CQP Skew Dynamics) ---
+        focused_strats = ["Baseline", "CQP"]
+        focused_handles = [
+            mpatches.Patch(
+                facecolor=STRATEGY_STYLES[s]["color"],
+                hatch=STRATEGY_STYLES[s]["hatch"],
+                edgecolor=STRATEGY_STYLES[s]["edgecolor"],
+                linewidth=STRATEGY_STYLES[s]["linewidth"],
+            )
+            for s in focused_strats
+        ]
+        focused_labels = [STRATEGY_STYLES[s]["label"] for s in focused_strats]
+
+        for grp_name, grp_queries, base_suffixes in query_groups:
+            suffixes = get_variant_suffixes(base_suffixes, variant)
+            n_q = len(grp_queries)
+            figsize, left_pad, wspace = get_group_geom(n_q, shared_y=False)
+            fig_f, axes_f = plt.subplots(1, n_q, figsize=figsize, sharey=False)
+            if n_q == 1:
+                axes_f = [axes_f]
+            plt.subplots_adjust(bottom=0.32, wspace=wspace, top=0.88, left=left_pad, right=0.98)
+
+            bar_w_f = 0.28
+            fs = get_anno_fontsize(n_q, profile)
+
+            for idx, q in enumerate(grp_queries):
+                ax = axes_f[idx]
+                q_df = slice_df[slice_df["query"] == q]
+                q_name = QUERY_INFO[q]["name"]
+
+                grouped = q_df.groupby(["z", "strategy"])["engine_time_ms"].agg(["mean", "sem"]).reset_index()
+                x = np.arange(len(z_vals))
+
+                strat_means = {}
+                strat_sems = {}
+                for s_idx, s in enumerate(focused_strats):
+                    s_data = grouped[grouped["strategy"] == s]
+                    s_style = STRATEGY_STYLES[s]
+                    means = []
+                    sems = []
+                    for z in z_vals:
+                        row = s_data[s_data["z"] == z]
+                        if not row.empty:
+                            means.append(row["mean"].values[0])
+                            sems.append(row["sem"].values[0] if not pd.isna(row["sem"].values[0]) else 0.0)
+                        elif s == "Baseline" and (q, z) in baseline_map:
+                            means.append(baseline_map[(q, z)])
+                            sems.append(0.0)
+                        else:
+                            means.append(0.0)
+                            sems.append(0.0)
+
+                    strat_means[s] = means
+                    strat_sems[s] = sems
+                    offset = (s_idx - 0.5) * bar_w_f
+                    ax.bar(
+                        x + offset, means, yerr=sems, width=bar_w_f,
+                        color=s_style["color"], hatch=s_style["hatch"],
+                        edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
+                        capsize=2.5,
                     )
 
-        ax.axhline(1.0, color="#666666", linestyle=":", linewidth=1.0)
-        ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"z={z}" for z in z_vals], fontsize=13)
-        if idx == 0:
-            ax.set_ylabel("Normalized Time (T / T_base)", fontsize=15)
+                all_vals = [m for m_list in strat_means.values() for m in m_list if m > 0]
+                max_h = max(all_vals) if all_vals else 1.0
+                y_pad = max_h * 0.025
 
-    fig.legend(
-        ordered_handles, ordered_labels,
-        loc="lower center", ncol=3, frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
-    )
-    save_figure(fig, out_dir / "part_a" / "fig1c_normalized_execution_time", profile)
+                if variant in (1, 2):
+                    for s_idx, s in enumerate(focused_strats):
+                        offset = (s_idx - 0.5) * bar_w_f
+                        for z_i, z in enumerate(z_vals):
+                            t_mcdb = mcdb_map.get((q, z), 0.0)
+                            t_base = baseline_map.get((q, z), strat_means.get("Baseline", [0.0] * len(z_vals))[z_i])
+                            t_cqp = strat_means.get("CQP", [0.0] * len(z_vals))[z_i]
 
-    # --- Fig 1c Version 3: Normalized Time Saved % ((T_base - T)/T_base * 100%, higher is better) ---
-    fig, axes = plt.subplots(1, 6, figsize=(18, 2.9), sharey=True)
-    plt.subplots_adjust(bottom=0.32, wspace=0.16, top=0.88)
-    for idx, q in enumerate(queries):
-        ax = axes[idx]
-        q_df = slice_df[slice_df["query"] == q]
-        q_name = QUERY_INFO[q]["name"]
-        grouped = q_df.groupby(["z", "strategy"])["engine_time_ms"].mean().reset_index()
-        x = np.arange(len(z_vals))
-        bar_w = 0.19
+                            if s == "Baseline":
+                                if t_base > 0 and t_mcdb > 0:
+                                    sp = t_mcdb / t_base
+                                    top_y = strat_means[s][z_i] + strat_sems[s][z_i]
+                                    ax.text(
+                                        x[z_i] + offset, top_y + y_pad, format_speedup(sp),
+                                        ha="center", va="bottom", fontsize=fs, fontweight="bold", color="#333333"
+                                    )
+                            elif s == "CQP":
+                                sp = 0.0
+                                if variant == 1 and t_cqp > 0 and t_base > 0:
+                                    sp = t_base / t_cqp
+                                elif variant == 2 and t_cqp > 0 and t_mcdb > 0:
+                                    sp = t_mcdb / t_cqp
+                                if sp > 0:
+                                    top_y = strat_means[s][z_i] + strat_sems[s][z_i]
+                                    ax.text(
+                                        x[z_i] + offset, top_y + y_pad, format_speedup(sp),
+                                        ha="center", va="bottom", fontsize=fs, fontweight="bold", color="#333333"
+                                    )
+                    ax.set_ylim(0, max_h * 1.25)
 
-        for s_idx, s in enumerate(canonical_strats):
-            s_data = grouped[grouped["strategy"] == s]
-            s_style = STRATEGY_STYLES[s]
-            saved_pcts = []
-            for z_i, z in enumerate(z_vals):
-                t_base = baseline_map.get((q, z), 1.0)
-                row = s_data[s_data["z"] == z]
-                if not row.empty:
-                    t_strat = row["engine_time_ms"].values[0]
-                elif s == "Baseline":
-                    t_strat = t_base
-                elif s == "MCDB-1000" and (q, z) in mcdb_map:
-                    t_strat = mcdb_map[(q, z)]
-                else:
-                    t_strat = 0.0
-                ts = ((t_base - t_strat) / t_base * 100.0) if t_base > 0 and t_strat > 0 else 0.0
-                saved_pcts.append(ts)
+                ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
+                ax.set_xticks(x)
+                ax.set_xticklabels([f"z={z}" for z in z_vals], fontsize=13)
+                if idx == 0:
+                    ax.set_ylabel("Execution Time (ms)", fontsize=15)
 
-            offset = (s_idx - 1) * bar_w
-            bars = ax.bar(
-                x + offset, saved_pcts, width=bar_w,
-                color=s_style["color"], hatch=s_style["hatch"],
-                edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
+            fig_f.legend(
+                focused_handles, focused_labels,
+                loc="lower center", ncol=2, frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
             )
+            save_figure_multi(fig_f, out_dir / "part_a", "fig1a_baseline_vs_cqp_strip", suffixes, profile)
 
-            # Annotate raw milliseconds on Baseline bars
-            if s == "Baseline":
-                for z_i, z in enumerate(z_vals):
-                    raw_ms = baseline_map.get((q, z), 0.0)
-                    ax.text(
-                        x[z_i] + offset, 5.0, f"{raw_ms:.0f}ms",
-                        ha="center", va="bottom", fontsize=11.5, color="#333333"
+        # --- Fig 1b: Representative Shared Y-Axis ---
+        for grp_name, grp_queries, base_suffixes in query_groups:
+            suffixes = get_variant_suffixes(base_suffixes, variant)
+            n_q = len(grp_queries)
+            figsize, left_pad, wspace = get_group_geom(n_q, shared_y=True)
+            fig, axes = plt.subplots(1, n_q, figsize=figsize, sharey=True)
+            if n_q == 1:
+                axes = [axes]
+            plt.subplots_adjust(bottom=0.32, wspace=wspace, top=0.88, left=left_pad, right=0.98)
+
+            has_mcdb = any((q, z) in mcdb_map for q in grp_queries for z in z_vals)
+            grp_strats = canonical_strats if has_mcdb else [s for s in canonical_strats if s != "MCDB-1000"]
+            grp_handles = [
+                mpatches.Patch(
+                    facecolor=STRATEGY_STYLES[s]["color"],
+                    hatch=STRATEGY_STYLES[s]["hatch"],
+                    edgecolor=STRATEGY_STYLES[s]["edgecolor"],
+                    linewidth=STRATEGY_STYLES[s]["linewidth"],
+                )
+                for s in grp_strats
+            ]
+            grp_labels = [STRATEGY_STYLES[s]["label"] for s in grp_strats]
+            bar_w = 0.19 if len(grp_strats) == 3 else 0.28
+            fs = get_anno_fontsize(n_q, profile)
+
+            grp_max_h = 1.0
+            grp_data = []
+            for idx, q in enumerate(grp_queries):
+                q_df = slice_df[slice_df["query"] == q]
+                grouped = q_df.groupby(["z", "strategy"])["engine_time_ms"].agg(["mean", "sem"]).reset_index()
+                strat_means = {}
+                strat_sems = {}
+                for s in grp_strats:
+                    s_data = grouped[grouped["strategy"] == s]
+                    means = []
+                    sems = []
+                    for z in z_vals:
+                        row = s_data[s_data["z"] == z]
+                        if not row.empty:
+                            means.append(row["mean"].values[0])
+                            sems.append(row["sem"].values[0] if not pd.isna(row["sem"].values[0]) else 0.0)
+                        elif s == "Baseline" and (q, z) in baseline_map:
+                            means.append(baseline_map[(q, z)])
+                            sems.append(0.0)
+                        elif s == "MCDB-1000" and (q, z) in mcdb_map:
+                            means.append(mcdb_map[(q, z)])
+                            sems.append(0.0)
+                        else:
+                            means.append(0.0)
+                            sems.append(0.0)
+                    strat_means[s] = means
+                    strat_sems[s] = sems
+                    for m in means:
+                        if m > grp_max_h:
+                            grp_max_h = m
+                grp_data.append((strat_means, strat_sems))
+
+            y_pad = grp_max_h * 0.025
+
+            for idx, q in enumerate(grp_queries):
+                ax = axes[idx]
+                q_name = QUERY_INFO[q]["name"]
+                strat_means, strat_sems = grp_data[idx]
+                x = np.arange(len(z_vals))
+
+                for s_idx, s in enumerate(grp_strats):
+                    s_style = STRATEGY_STYLES[s]
+                    means = strat_means[s]
+                    sems = strat_sems[s]
+                    offset = (s_idx - (len(grp_strats) - 1) / 2.0) * bar_w
+                    ax.bar(
+                        x + offset, means, yerr=sems, width=bar_w,
+                        color=s_style["color"], hatch=s_style["hatch"],
+                        edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
+                        capsize=2.5,
                     )
 
-        ax.axhline(0.0, color="#666666", linestyle="-", linewidth=0.8)
-        ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"z={z}" for z in z_vals], fontsize=13)
-        if idx == 0:
-            ax.set_ylabel("Execution Time Saved (%)", fontsize=15)
+                if variant in (1, 2):
+                    for s_idx, s in enumerate(grp_strats):
+                        offset = (s_idx - (len(grp_strats) - 1) / 2.0) * bar_w
+                        for z_i, z in enumerate(z_vals):
+                            t_mcdb = mcdb_map.get((q, z), 0.0)
+                            t_base = baseline_map.get((q, z), strat_means.get("Baseline", [0.0] * len(z_vals))[z_i])
+                            t_cqp = strat_means.get("CQP", [0.0] * len(z_vals))[z_i]
 
-    fig.legend(
-        ordered_handles, ordered_labels,
-        loc="lower center", ncol=3, frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
-    )
-    save_figure(fig, out_dir / "part_a" / "fig1c_normalized_time_saved", profile)
+                            if s == "Baseline":
+                                if t_base > 0 and t_mcdb > 0:
+                                    sp = t_mcdb / t_base
+                                    top_y = strat_means[s][z_i] + strat_sems[s][z_i]
+                                    ax.text(
+                                        x[z_i] + offset, top_y + y_pad, format_speedup(sp),
+                                        ha="center", va="bottom", fontsize=fs, fontweight="bold", color="#333333"
+                                    )
+                            elif s == "CQP":
+                                sp = 0.0
+                                if variant == 1 and t_cqp > 0 and t_base > 0:
+                                    sp = t_base / t_cqp
+                                elif variant == 2 and t_cqp > 0 and t_mcdb > 0:
+                                    sp = t_mcdb / t_cqp
+                                if sp > 0:
+                                    top_y = strat_means[s][z_i] + strat_sems[s][z_i]
+                                    ax.text(
+                                        x[z_i] + offset, top_y + y_pad, format_speedup(sp),
+                                        ha="center", va="bottom", fontsize=fs, fontweight="bold", color="#333333"
+                                    )
+
+                ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
+                ax.set_xticks(x)
+                ax.set_xticklabels([f"z={z}" for z in z_vals], fontsize=13)
+                if idx == 0:
+                    ax.set_ylabel("Execution Time (ms)", fontsize=15)
+
+            if variant in (1, 2):
+                axes[0].set_ylim(0, grp_max_h * 1.25)
+
+            fig.legend(
+                grp_handles, grp_labels,
+                loc="lower center", ncol=len(grp_strats), frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
+            )
+            save_figure_multi(fig, out_dir / "part_a", "fig1b_representative_shared_axis", suffixes, profile)
+
+        # --- Fig 1c Version 1: Normalized Speedup Ratio (T_base / T, higher is better) ---
+        for grp_name, grp_queries, base_suffixes in query_groups:
+            suffixes = get_variant_suffixes(base_suffixes, variant)
+            n_q = len(grp_queries)
+            figsize, left_pad, wspace = get_group_geom(n_q, shared_y=False)
+            fig, axes = plt.subplots(1, n_q, figsize=figsize, sharey=False)
+            if n_q == 1:
+                axes = [axes]
+            plt.subplots_adjust(bottom=0.32, wspace=wspace, top=0.88, left=left_pad, right=0.98)
+
+            has_mcdb = any((q, z) in mcdb_map for q in grp_queries for z in z_vals)
+            grp_strats = canonical_strats if has_mcdb else [s for s in canonical_strats if s != "MCDB-1000"]
+            grp_handles = [
+                mpatches.Patch(
+                    facecolor=STRATEGY_STYLES[s]["color"],
+                    hatch=STRATEGY_STYLES[s]["hatch"],
+                    edgecolor=STRATEGY_STYLES[s]["edgecolor"],
+                    linewidth=STRATEGY_STYLES[s]["linewidth"],
+                )
+                for s in grp_strats
+            ]
+            grp_labels = [STRATEGY_STYLES[s]["label"] for s in grp_strats]
+            bar_w = 0.19 if len(grp_strats) == 3 else 0.28
+            fs = get_anno_fontsize(n_q, profile)
+
+            for idx, q in enumerate(grp_queries):
+                ax = axes[idx]
+                q_df = slice_df[slice_df["query"] == q]
+                q_name = QUERY_INFO[q]["name"]
+                grouped = q_df.groupby(["z", "strategy"])["engine_time_ms"].mean().reset_index()
+                x = np.arange(len(z_vals))
+
+                speedup_map = {}
+                for s_idx, s in enumerate(grp_strats):
+                    s_data = grouped[grouped["strategy"] == s]
+                    s_style = STRATEGY_STYLES[s]
+                    speedups = []
+                    for z_i, z in enumerate(z_vals):
+                        t_base = baseline_map.get((q, z), 1.0)
+                        row = s_data[s_data["z"] == z]
+                        if not row.empty:
+                            t_strat = row["engine_time_ms"].values[0]
+                        elif s == "Baseline":
+                            t_strat = t_base
+                        elif s == "MCDB-1000" and (q, z) in mcdb_map:
+                            t_strat = mcdb_map[(q, z)]
+                        else:
+                            t_strat = 0.0
+                        sp = (t_base / t_strat) if t_strat > 0 else 0.0
+                        speedups.append(sp)
+
+                    speedup_map[s] = speedups
+                    offset = (s_idx - (len(grp_strats) - 1) / 2.0) * bar_w
+                    ax.bar(
+                        x + offset, speedups, width=bar_w,
+                        color=s_style["color"], hatch=s_style["hatch"],
+                        edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
+                    )
+
+                    # Default unannotated variant: raw milliseconds on Baseline bars
+                    if variant is None and s == "Baseline":
+                        for z_i, z in enumerate(z_vals):
+                            raw_ms = baseline_map.get((q, z), 0.0)
+                            ax.text(
+                                x[z_i] + offset, 1.05, f"{raw_ms:.0f}ms",
+                                ha="center", va="bottom", fontsize=11.5, color="#333333"
+                            )
+
+                all_sp = [sp for sp_list in speedup_map.values() for sp in sp_list if sp > 0]
+                max_sp = max(all_sp) if all_sp else 1.0
+                y_pad = max_sp * 0.025
+
+                if variant in (1, 2):
+                    for s_idx, s in enumerate(grp_strats):
+                        offset = (s_idx - (len(grp_strats) - 1) / 2.0) * bar_w
+                        for z_i, z in enumerate(z_vals):
+                            t_mcdb = mcdb_map.get((q, z), 0.0)
+                            t_base = baseline_map.get((q, z), 0.0)
+                            sp_bar = speedup_map[s][z_i]
+
+                            if s == "Baseline":
+                                if t_base > 0 and t_mcdb > 0:
+                                    sp = t_mcdb / t_base
+                                    ax.text(
+                                        x[z_i] + offset, 1.0 + y_pad, format_speedup(sp),
+                                        ha="center", va="bottom", fontsize=fs, fontweight="bold", color="#333333"
+                                    )
+                            elif s == "CQP":
+                                sp = 0.0
+                                row = grouped[(grouped["strategy"] == "CQP") & (grouped["z"] == z)]
+                                t_cqp = row["engine_time_ms"].values[0] if not row.empty else 0.0
+                                if variant == 1 and t_cqp > 0 and t_base > 0:
+                                    sp = t_base / t_cqp
+                                elif variant == 2 and t_cqp > 0 and t_mcdb > 0:
+                                    sp = t_mcdb / t_cqp
+                                if sp > 0:
+                                    ax.text(
+                                        x[z_i] + offset, sp_bar + y_pad, format_speedup(sp),
+                                        ha="center", va="bottom", fontsize=fs, fontweight="bold", color="#333333"
+                                    )
+                    ax.set_ylim(0, max_sp * 1.25)
+
+                ax.axhline(1.0, color="#666666", linestyle=":", linewidth=1.0)
+                ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
+                ax.set_xticks(x)
+                ax.set_xticklabels([f"z={z}" for z in z_vals], fontsize=13)
+                if idx == 0:
+                    ax.set_ylabel("Speedup Ratio (T_base / T)", fontsize=15)
+
+            fig.legend(
+                grp_handles, grp_labels,
+                loc="lower center", ncol=len(grp_strats), frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
+            )
+            save_figure_multi(fig, out_dir / "part_a", "fig1c_normalized_speedup", suffixes, profile)
+
+        # --- Fig 1c Version 2: Normalized Execution Time (T / T_base, Baseline = 1.0) ---
+        for grp_name, grp_queries, base_suffixes in query_groups:
+            suffixes = get_variant_suffixes(base_suffixes, variant)
+            n_q = len(grp_queries)
+            figsize, left_pad, wspace = get_group_geom(n_q, shared_y=True)
+            fig, axes = plt.subplots(1, n_q, figsize=figsize, sharey=True)
+            if n_q == 1:
+                axes = [axes]
+            plt.subplots_adjust(bottom=0.32, wspace=wspace, top=0.88, left=left_pad, right=0.98)
+
+            has_mcdb = any((q, z) in mcdb_map for q in grp_queries for z in z_vals)
+            grp_strats = canonical_strats if has_mcdb else [s for s in canonical_strats if s != "MCDB-1000"]
+            grp_handles = [
+                mpatches.Patch(
+                    facecolor=STRATEGY_STYLES[s]["color"],
+                    hatch=STRATEGY_STYLES[s]["hatch"],
+                    edgecolor=STRATEGY_STYLES[s]["edgecolor"],
+                    linewidth=STRATEGY_STYLES[s]["linewidth"],
+                )
+                for s in grp_strats
+            ]
+            grp_labels = [STRATEGY_STYLES[s]["label"] for s in grp_strats]
+            bar_w = 0.19 if len(grp_strats) == 3 else 0.28
+            fs = get_anno_fontsize(n_q, profile)
+
+            grp_max_t = 1.0
+            grp_data = []
+            for idx, q in enumerate(grp_queries):
+                q_df = slice_df[slice_df["query"] == q]
+                grouped = q_df.groupby(["z", "strategy"])["engine_time_ms"].mean().reset_index()
+                strat_norm = {}
+                for s in grp_strats:
+                    s_data = grouped[grouped["strategy"] == s]
+                    norm_times = []
+                    for z_i, z in enumerate(z_vals):
+                        t_base = baseline_map.get((q, z), 1.0)
+                        row = s_data[s_data["z"] == z]
+                        if not row.empty:
+                            t_strat = row["engine_time_ms"].values[0]
+                        elif s == "Baseline":
+                            t_strat = t_base
+                        elif s == "MCDB-1000" and (q, z) in mcdb_map:
+                            t_strat = mcdb_map[(q, z)]
+                        else:
+                            t_strat = 0.0
+                        norm_t = (t_strat / t_base) if t_base > 0 else 0.0
+                        norm_times.append(norm_t)
+                    strat_norm[s] = norm_times
+                    for val in norm_times:
+                        if val > grp_max_t:
+                            grp_max_t = val
+                grp_data.append((grouped, strat_norm))
+
+            y_pad = grp_max_t * 0.025
+
+            for idx, q in enumerate(grp_queries):
+                ax = axes[idx]
+                q_name = QUERY_INFO[q]["name"]
+                grouped, strat_norm = grp_data[idx]
+                x = np.arange(len(z_vals))
+
+                for s_idx, s in enumerate(grp_strats):
+                    s_style = STRATEGY_STYLES[s]
+                    norm_times = strat_norm[s]
+                    offset = (s_idx - (len(grp_strats) - 1) / 2.0) * bar_w
+                    ax.bar(
+                        x + offset, norm_times, width=bar_w,
+                        color=s_style["color"], hatch=s_style["hatch"],
+                        edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
+                    )
+
+                    if variant is None and s == "Baseline":
+                        for z_i, z in enumerate(z_vals):
+                            raw_ms = baseline_map.get((q, z), 0.0)
+                            ax.text(
+                                x[z_i] + offset, 1.05, f"{raw_ms:.0f}ms",
+                                ha="center", va="bottom", fontsize=11.5, color="#333333"
+                            )
+
+                if variant in (1, 2):
+                    for s_idx, s in enumerate(grp_strats):
+                        offset = (s_idx - (len(grp_strats) - 1) / 2.0) * bar_w
+                        for z_i, z in enumerate(z_vals):
+                            t_mcdb = mcdb_map.get((q, z), 0.0)
+                            t_base = baseline_map.get((q, z), 0.0)
+                            norm_t = strat_norm[s][z_i]
+
+                            if s == "Baseline":
+                                if t_base > 0 and t_mcdb > 0:
+                                    sp = t_mcdb / t_base
+                                    ax.text(
+                                        x[z_i] + offset, 1.0 + y_pad, format_speedup(sp),
+                                        ha="center", va="bottom", fontsize=fs, fontweight="bold", color="#333333"
+                                    )
+                            elif s == "CQP":
+                                sp = 0.0
+                                row = grouped[(grouped["strategy"] == "CQP") & (grouped["z"] == z)]
+                                t_cqp = row["engine_time_ms"].values[0] if not row.empty else 0.0
+                                if variant == 1 and t_cqp > 0 and t_base > 0:
+                                    sp = t_base / t_cqp
+                                elif variant == 2 and t_cqp > 0 and t_mcdb > 0:
+                                    sp = t_mcdb / t_cqp
+                                if sp > 0:
+                                    ax.text(
+                                        x[z_i] + offset, norm_t + y_pad, format_speedup(sp),
+                                        ha="center", va="bottom", fontsize=fs, fontweight="bold", color="#333333"
+                                    )
+
+                ax.axhline(1.0, color="#666666", linestyle=":", linewidth=1.0)
+                ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
+                ax.set_xticks(x)
+                ax.set_xticklabels([f"z={z}" for z in z_vals], fontsize=13)
+                if idx == 0:
+                    ax.set_ylabel("Normalized Time (T / T_base)", fontsize=15)
+
+            if variant in (1, 2):
+                axes[0].set_ylim(0, grp_max_t * 1.25)
+
+            fig.legend(
+                grp_handles, grp_labels,
+                loc="lower center", ncol=len(grp_strats), frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
+            )
+            save_figure_multi(fig, out_dir / "part_a", "fig1c_normalized_execution_time", suffixes, profile)
+
+        # --- Fig 1c Version 3: Normalized Time Saved % ((T_base - T)/T_base * 100%, higher is better) ---
+        for grp_name, grp_queries, base_suffixes in query_groups:
+            suffixes = get_variant_suffixes(base_suffixes, variant)
+            n_q = len(grp_queries)
+            figsize, left_pad, wspace = get_group_geom(n_q, shared_y=True)
+            fig, axes = plt.subplots(1, n_q, figsize=figsize, sharey=True)
+            if n_q == 1:
+                axes = [axes]
+            plt.subplots_adjust(bottom=0.32, wspace=wspace, top=0.88, left=left_pad, right=0.98)
+
+            has_mcdb = any((q, z) in mcdb_map for q in grp_queries for z in z_vals)
+            grp_strats = canonical_strats if has_mcdb else [s for s in canonical_strats if s != "MCDB-1000"]
+            grp_handles = [
+                mpatches.Patch(
+                    facecolor=STRATEGY_STYLES[s]["color"],
+                    hatch=STRATEGY_STYLES[s]["hatch"],
+                    edgecolor=STRATEGY_STYLES[s]["edgecolor"],
+                    linewidth=STRATEGY_STYLES[s]["linewidth"],
+                )
+                for s in grp_strats
+            ]
+            grp_labels = [STRATEGY_STYLES[s]["label"] for s in grp_strats]
+            bar_w = 0.19 if len(grp_strats) == 3 else 0.28
+            fs = get_anno_fontsize(n_q, profile)
+
+            grp_max_sav = 100.0
+            grp_data = []
+            for idx, q in enumerate(grp_queries):
+                q_df = slice_df[slice_df["query"] == q]
+                grouped = q_df.groupby(["z", "strategy"])["engine_time_ms"].mean().reset_index()
+                strat_saved = {}
+                for s in grp_strats:
+                    s_data = grouped[grouped["strategy"] == s]
+                    saved_pcts = []
+                    for z_i, z in enumerate(z_vals):
+                        t_base = baseline_map.get((q, z), 1.0)
+                        row = s_data[s_data["z"] == z]
+                        if not row.empty:
+                            t_strat = row["engine_time_ms"].values[0]
+                        elif s == "Baseline":
+                            t_strat = t_base
+                        elif s == "MCDB-1000" and (q, z) in mcdb_map:
+                            t_strat = mcdb_map[(q, z)]
+                        else:
+                            t_strat = 0.0
+                        ts = ((t_base - t_strat) / t_base * 100.0) if t_base > 0 and t_strat > 0 else 0.0
+                        saved_pcts.append(ts)
+                    strat_saved[s] = saved_pcts
+                    for val in saved_pcts:
+                        if val > grp_max_sav:
+                            grp_max_sav = val
+                grp_data.append((grouped, strat_saved))
+
+            for idx, q in enumerate(grp_queries):
+                ax = axes[idx]
+                q_name = QUERY_INFO[q]["name"]
+                grouped, strat_saved = grp_data[idx]
+                x = np.arange(len(z_vals))
+
+                for s_idx, s in enumerate(grp_strats):
+                    s_style = STRATEGY_STYLES[s]
+                    saved_pcts = strat_saved[s]
+                    offset = (s_idx - (len(grp_strats) - 1) / 2.0) * bar_w
+                    ax.bar(
+                        x + offset, saved_pcts, width=bar_w,
+                        color=s_style["color"], hatch=s_style["hatch"],
+                        edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
+                    )
+
+                    if variant is None and s == "Baseline":
+                        for z_i, z in enumerate(z_vals):
+                            raw_ms = baseline_map.get((q, z), 0.0)
+                            ax.text(
+                                x[z_i] + offset, 5.0, f"{raw_ms:.0f}ms",
+                                ha="center", va="bottom", fontsize=11.5, color="#333333"
+                            )
+
+                if variant in (1, 2):
+                    for s_idx, s in enumerate(grp_strats):
+                        offset = (s_idx - (len(grp_strats) - 1) / 2.0) * bar_w
+                        for z_i, z in enumerate(z_vals):
+                            t_mcdb = mcdb_map.get((q, z), 0.0)
+                            t_base = baseline_map.get((q, z), 0.0)
+                            saved_pct = strat_saved[s][z_i]
+
+                            if s == "Baseline":
+                                if t_base > 0 and t_mcdb > 0:
+                                    sp = t_mcdb / t_base
+                                    ax.text(
+                                        x[z_i] + offset, 4.0, format_speedup(sp),
+                                        ha="center", va="bottom", fontsize=fs, fontweight="bold", color="#333333"
+                                    )
+                            elif s == "CQP":
+                                sp = 0.0
+                                row = grouped[(grouped["strategy"] == "CQP") & (grouped["z"] == z)]
+                                t_cqp = row["engine_time_ms"].values[0] if not row.empty else 0.0
+                                if variant == 1 and t_cqp > 0 and t_base > 0:
+                                    sp = t_base / t_cqp
+                                elif variant == 2 and t_cqp > 0 and t_mcdb > 0:
+                                    sp = t_mcdb / t_cqp
+                                if sp > 0:
+                                    ax.text(
+                                        x[z_i] + offset, max(saved_pct, 0.0) + 3.0, format_speedup(sp),
+                                        ha="center", va="bottom", fontsize=fs, fontweight="bold", color="#333333"
+                                    )
+
+                ax.axhline(0.0, color="#666666", linestyle="-", linewidth=0.8)
+                ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
+                ax.set_xticks(x)
+                ax.set_xticklabels([f"z={z}" for z in z_vals], fontsize=13)
+                if idx == 0:
+                    ax.set_ylabel("Execution Time Saved (%)", fontsize=15)
+
+            if variant in (1, 2):
+                all_s_vals = [v for d in grp_data for s in grp_strats for v in d[1][s]]
+                min_s_val = min(all_s_vals) if all_s_vals else 0.0
+                axes[0].set_ylim(min(0.0, min_s_val), grp_max_sav * 1.25)
+
+            fig.legend(
+                grp_handles, grp_labels,
+                loc="lower center", ncol=len(grp_strats), frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
+            )
+            save_figure_multi(fig, out_dir / "part_a", "fig1c_normalized_time_saved", suffixes, profile)
 
     # --- Fig 1d: Parity Correlation (Time Saved % vs Stream Saved %) ---
-    fig, ax = plt.subplots(figsize=(6.2, 4.8))
     cqp_df = slice_df[slice_df["strategy"] == "CQP"]
-
-    points_x, points_y, colors = [], [], []
     modality_colors = {"vision": "#1B9E77", "text": "#D95F02", "relational": "#7570B3"}
 
-    for _, row in cqp_df.iterrows():
-        q = row["query"]
-        z = row["z"]
-        t_base = baseline_map.get((q, z), 0.0)
-        t_cqp = row["engine_time_ms"]
-        time_saved = ((t_base - t_cqp) / t_base * 100.0) if t_base > 0 else 0.0
-        stream_saved = row["stream_savings_pct"]
-        points_x.append(stream_saved)
-        points_y.append(time_saved)
-        colors.append(modality_colors.get(row["modality"], "#333333"))
+    for grp_name, grp_queries, suffixes in query_groups:
+        fig, ax = plt.subplots(figsize=(6.2, 4.8))
+        cqp_sub = cqp_df[cqp_df["query"].isin(grp_queries)]
 
-    ax.scatter(points_x, points_y, c=colors, alpha=0.8, edgecolors="k", s=70, zorder=3)
-    ax.plot([0, 100], [0, 100], "k--", label="Ideal Parity (y=x)", linewidth=1.5, zorder=2)
-    ax.set_xlim(0, 100)
-    ax.set_ylim(0, 100)
-    ax.set_xlabel("Stream Ingestion Saved (%)", fontsize=15)
-    ax.set_ylabel("Execution Time Saved (%)", fontsize=15)
-    if profile == "presentation":
-        ax.set_title("Representative Efficiency Parity (k=3, alpha=0.05)", fontsize=16)
-    ax.legend(loc="upper left", frameon=True, fontsize=14)
-    save_figure(fig, out_dir / "part_a" / "fig1d_representative_correlation_parity", profile)
+        points_x, points_y, colors = [], [], []
+
+        for _, row in cqp_sub.iterrows():
+            q = row["query"]
+            z = row["z"]
+            t_base = baseline_map.get((q, z), 0.0)
+            t_cqp = row["engine_time_ms"]
+            time_saved = ((t_base - t_cqp) / t_base * 100.0) if t_base > 0 else 0.0
+            stream_saved = row["stream_savings_pct"]
+            points_x.append(stream_saved)
+            points_y.append(time_saved)
+            colors.append(modality_colors.get(row["modality"], "#333333"))
+
+        ax.scatter(points_x, points_y, c=colors, alpha=0.8, edgecolors="k", s=70, zorder=3)
+        ax.plot([0, 100], [0, 100], "k--", label="Ideal Parity (y=x)", linewidth=1.5, zorder=2)
+        ax.set_xlim(0, 100)
+        ax.set_ylim(0, 100)
+        ax.set_xlabel("Stream Ingestion Saved (%)", fontsize=15)
+        ax.set_ylabel("Execution Time Saved (%)", fontsize=15)
+        if profile == "presentation":
+            if grp_name == "perception":
+                ax.set_title("Perception Workloads Parity (Q1-Q2, k=3, α=0.05)", fontsize=16)
+            elif grp_name == "relational":
+                ax.set_title("Relational Workloads Parity (Q3-Q4, k=3, α=0.05)", fontsize=16)
+            else:
+                ax.set_title("Representative Efficiency Parity (k=3, alpha=0.05)", fontsize=16)
+        else:
+            if grp_name == "perception":
+                ax.set_title("(a) Perception Workloads (Q1–Q2)", fontsize=15)
+            elif grp_name == "relational":
+                ax.set_title("(b) Relational Workloads (Q3–Q4)", fontsize=15)
+        ax.legend(loc="upper left", frameon=True, fontsize=14)
+        save_figure_multi(fig, out_dir / "part_a", "fig1d_representative_correlation_parity", suffixes, profile)
+
+    # --- Fig 1d Dual-Panel Side-by-Side: Left = Perception (Q1-Q2), Right = Relational (Q3-Q4) ---
+    fig, (ax_p, ax_r) = plt.subplots(1, 2, figsize=(11.5, 4.8))
+    plt.subplots_adjust(wspace=0.25, bottom=0.18, top=0.88, left=0.08, right=0.96)
+    for ax, (title_sub, grp_q) in zip([ax_p, ax_r], [("(a) Perception Workloads (Q1–Q2)", ["q1a", "q1b", "q2a", "q2b"]), ("(b) Relational Workloads (Q3–Q4)", ["q3", "q4"])]):
+        cqp_sub = cqp_df[cqp_df["query"].isin(grp_q)]
+        pts_x, pts_y, cols = [], [], []
+        for _, row in cqp_sub.iterrows():
+            q = row["query"]
+            z = row["z"]
+            t_base = baseline_map.get((q, z), 0.0)
+            t_cqp = row["engine_time_ms"]
+            time_saved = ((t_base - t_cqp) / t_base * 100.0) if t_base > 0 else 0.0
+            stream_saved = row["stream_savings_pct"]
+            pts_x.append(stream_saved)
+            pts_y.append(time_saved)
+            cols.append(modality_colors.get(row["modality"], "#333333"))
+        ax.scatter(pts_x, pts_y, c=cols, alpha=0.8, edgecolors="k", s=70, zorder=3)
+        ax.plot([0, 100], [0, 100], "k--", label="Ideal Parity (y=x)", linewidth=1.5, zorder=2)
+        ax.set_xlim(0, 100)
+        ax.set_ylim(0, 100)
+        ax.set_xlabel("Stream Ingestion Saved (%)", fontsize=15)
+        ax.set_ylabel("Execution Time Saved (%)", fontsize=15)
+        ax.set_title(title_sub if profile == "paper" else title_sub.split(") ")[-1], fontsize=15)
+        ax.legend(loc="upper left", frameon=True, fontsize=13)
+        ax.grid(True, linestyle="--", alpha=0.4)
+    save_figure_multi(fig, out_dir / "part_a", "fig1d_representative_correlation_parity_dual_panel", [""], profile)
+
 
 
 # =========================================================================
@@ -976,7 +1440,7 @@ def plot_part_b_topk(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
                     m20_legend_handles[s_style["label"]] = bars[0]
 
             ax.set_xticks(x_k)
-            ax.set_xticklabels([f"k={k}" for k in m20_k_vals], fontsize=11.5)
+            ax.set_xticklabels([f"k={k}" if k not in (10, 20) else "" for k in m20_k_vals], fontsize=11.5)
             ax.set_title(f"Q3 (M=20, z={z_val})", fontsize=15)
             if z_i == 0:
                 ax.set_ylabel("Execution Time (ms)", fontsize=15)
@@ -1051,14 +1515,14 @@ def plot_part_b_topk(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
         )
 
         ax_s.set_xticks(m20_k_vals)
-        ax_s.set_xticklabels([f"{k}" for k in m20_k_vals], fontsize=13)
+        ax_s.set_xticklabels([f"{k}" if k not in (10, 20) else "" for k in m20_k_vals], fontsize=13)
         ax_s.set_xlabel("Target Rank (k)", fontsize=15)
         ax_s.set_ylabel("Stream Ingestion Saved (%)", fontsize=15)
         ax_s.set_title("(a) Q3 (M=20)" if profile == "paper" else "Q3 (M=20)", fontsize=15)
         ax_s.grid(True, linestyle="--", alpha=0.5)
 
         ax_t.set_xticks(m20_k_vals)
-        ax_t.set_xticklabels([f"{k}" for k in m20_k_vals], fontsize=13)
+        ax_t.set_xticklabels([f"{k}" if k not in (10, 20) else "" for k in m20_k_vals], fontsize=13)
         ax_t.set_xlabel("Target Rank (k)", fontsize=15)
         ax_t.set_ylabel("Execution Time (ms)", fontsize=15)
         ax_t.set_title("(b) Q3 (M=20)" if profile == "paper" else "Q3 (M=20)", fontsize=15)
@@ -1185,7 +1649,7 @@ def plot_part_b_topk(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
         ax1.set_ylabel("Stream Ingestion Saved (%)", fontsize=14)
         ax1.set_title("(a) Q3 (M=20): Savings vs. Rank k", fontsize=15)
         ax1.set_xticks(sorted(q3_m20_cqp["k"].unique()))
-        ax1.set_xticklabels([str(k) for k in sorted(q3_m20_cqp["k"].unique())], fontsize=11)
+        ax1.set_xticklabels([str(k) if k not in (10, 20) else "" for k in sorted(q3_m20_cqp["k"].unique())], fontsize=11)
         ax1.grid(True, linestyle="--", alpha=0.5)
 
         ax2.set_xlabel(r"Weight Gap $\Delta W = W_k - W_{k+1}$", fontsize=14)
@@ -1197,49 +1661,59 @@ def plot_part_b_topk(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
         fig.legend(handles, labels, loc="lower center", ncol=2, frameon=True, fontsize=13, bbox_to_anchor=(0.5, 0.02))
         save_figure(fig, out_dir / "part_b" / "fig2g_q3_m20_savings_and_delta_w_scatter", profile)
 
-        # 2. Linear Delta W Correlation (Grouped Means)
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.4))
-        plt.subplots_adjust(bottom=0.20, top=0.88, wspace=0.28)
-        for idx, (z, ax) in enumerate([(1.0, ax1), (2.0, ax2)]):
-            if z not in q3_m20_cqp["z"].values:
-                continue
-            sub = q3_m20_cqp[q3_m20_cqp["z"] == z]
-            zs = z_styles[z]
-            grouped = sub.groupby("k")[["delta_w", "stream_savings_pct"]].agg(["mean", "sem"]).reset_index()
-            x = grouped[("delta_w", "mean")].values
-            y = grouped[("stream_savings_pct", "mean")].values
-            yerr = grouped[("stream_savings_pct", "sem")].values
+        # 2. Linear Delta W Correlation (Grouped Means) - Both Standard and Clean Versions
+        for clean_mode in [False, True]:
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.4))
+            plt.subplots_adjust(bottom=0.20, top=0.88, wspace=0.28)
+            for idx, (z, ax) in enumerate([(1.0, ax1), (2.0, ax2)]):
+                if z not in q3_m20_cqp["z"].values:
+                    continue
+                sub = q3_m20_cqp[q3_m20_cqp["z"] == z]
+                zs = z_styles[z]
+                grouped = sub.groupby("k")[["delta_w", "stream_savings_pct"]].agg(["mean", "sem"]).reset_index()
+                x = grouped[("delta_w", "mean")].values
+                y = grouped[("stream_savings_pct", "mean")].values
+                yerr = grouped[("stream_savings_pct", "sem")].values
 
-            ax.errorbar(
-                x, y, yerr=yerr, fmt=zs["marker"], markersize=8, capsize=4,
-                color=zs["color"], markeredgecolor="black", markeredgewidth=1.0,
-                linewidth=1.8, label=f"Mean per Rank k (z={z})"
-            )
-            slope, intercept, r_value, p_value, _ = stats.linregress(x, y)
-            x_line = np.linspace(x.min(), x.max(), 100)
-            ax.plot(x_line, slope * x_line + intercept, color="#d62728", linestyle="--", linewidth=2.0, label=f"Fit (r = {r_value:.2f})")
+                ax.errorbar(
+                    x, y, yerr=yerr, fmt=zs["marker"], markersize=8, capsize=4,
+                    color=zs["color"], markeredgecolor="black", markeredgewidth=1.0,
+                    linewidth=1.8, label=f"Mean per Rank k (z={z})"
+                )
+                slope, intercept, r_value, p_value, _ = stats.linregress(x, y)
+                if not clean_mode:
+                    x_line = np.linspace(x.min(), x.max(), 100)
+                    ax.plot(x_line, slope * x_line + intercept, color="#d62728", linestyle="--", linewidth=2.0, label=f"Fit (r = {r_value:.2f})")
 
-            rho_val, _ = stats.spearmanr(x, y)
-            p_pow = int(np.floor(np.log10(max(p_value, 1e-100))))
-            p_display = f"$p < 10^{{{p_pow}}}$" if p_value < 0.001 else f"$p = {p_value:.3f}$"
-            stats_text = (
-                f"Pearson $r = {r_value:.3f}$ ({p_display})\n"
-                f"Spearman $\\rho = {rho_val:.3f}$\n"
-                f"$R^2 = {r_value**2:.3f}$\n"
-                f"Mean per $k$ (N=12)"
-            )
-            ax.text(
-                0.05, 0.93, stats_text, transform=ax.transAxes,
-                fontsize=11.5, verticalalignment="top",
-                bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#cccccc", alpha=0.92)
-            )
-            ax.set_xlabel(r"Weight Gap $\Delta W = W_k - W_{k+1}$", fontsize=14)
-            if idx == 0:
-                ax.set_ylabel("Stream Ingestion Saved (%)", fontsize=14)
-            ax.set_title(f"Q3 (M=20, z={z}) Correlation", fontsize=15)
-            ax.grid(True, linestyle="--", alpha=0.5)
-            ax.legend(loc="lower right", fontsize=11, frameon=True)
-        save_figure(fig, out_dir / "part_b" / "fig2g_q3_m20_delta_w_correlation", profile)
+                if clean_mode:
+                    stats_text = (
+                        f"Pearson $r = {r_value:.3f}$\n"
+                        f"$R^2 = {r_value**2:.3f}$"
+                    )
+                else:
+                    rho_val, _ = stats.spearmanr(x, y)
+                    p_pow = int(np.floor(np.log10(max(p_value, 1e-100))))
+                    p_display = f"$p < 10^{{{p_pow}}}$" if p_value < 0.001 else f"$p = {p_value:.3f}$"
+                    stats_text = (
+                        f"Pearson $r = {r_value:.3f}$ ({p_display})\n"
+                        f"Spearman $\\rho = {rho_val:.3f}$\n"
+                        f"$R^2 = {r_value**2:.3f}$\n"
+                        f"Mean per $k$ (N=12)"
+                    )
+                ax.text(
+                    0.05, 0.93, stats_text, transform=ax.transAxes,
+                    fontsize=12, verticalalignment="top",
+                    bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#cccccc", alpha=0.92)
+                )
+                ax.set_xlabel(r"Weight Gap $\Delta W = W_k - W_{k+1}$", fontsize=14)
+                if idx == 0:
+                    ax.set_ylabel("Stream Ingestion Saved (%)", fontsize=14)
+                ax.set_title(f"Q3 (M=20, z={z}) Correlation", fontsize=15)
+                ax.grid(True, linestyle="--", alpha=0.5)
+                if not clean_mode:
+                    ax.legend(loc="lower right", fontsize=11, frameon=True)
+            suffix = "_clean" if clean_mode else ""
+            save_figure(fig, out_dir / "part_b" / f"fig2g_q3_m20_delta_w_correlation{suffix}", profile)
 
         # 3. Log-Scale Delta W (Grouped Means) - 2-Panel
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.0, 4.2))
@@ -1266,7 +1740,7 @@ def plot_part_b_topk(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
         ax1.set_ylabel("Stream Ingestion Saved (%)", fontsize=14)
         ax1.set_title("(a) Q3 (M=20): Savings vs. Rank k", fontsize=15)
         ax1.set_xticks(sorted(q3_m20_cqp["k"].unique()))
-        ax1.set_xticklabels([str(k) for k in sorted(q3_m20_cqp["k"].unique())], fontsize=11)
+        ax1.set_xticklabels([str(k) if k not in (10, 20) else "" for k in sorted(q3_m20_cqp["k"].unique())], fontsize=11)
         ax1.grid(True, linestyle="--", alpha=0.5)
 
         ax2.set_xscale("log")
@@ -1278,51 +1752,61 @@ def plot_part_b_topk(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
         fig.legend(handles, labels, loc="lower center", ncol=2, frameon=True, fontsize=13, bbox_to_anchor=(0.5, 0.02))
         save_figure(fig, out_dir / "part_b" / "fig2g_q3_m20_savings_and_delta_w_log_grouped", profile)
 
-        # 4. Log-Scale Delta W Correlation (Grouped Means)
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.4))
-        plt.subplots_adjust(bottom=0.20, top=0.88, wspace=0.28)
-        for idx, (z, ax) in enumerate([(1.0, ax1), (2.0, ax2)]):
-            if z not in q3_m20_cqp["z"].values:
-                continue
-            sub = q3_m20_cqp[(q3_m20_cqp["z"] == z) & (q3_m20_cqp["k"] < 20)]
-            zs = z_styles[z]
-            grouped = sub.groupby("k")[["delta_w", "stream_savings_pct"]].agg(["mean", "sem"]).reset_index()
-            x = grouped[("delta_w", "mean")].values
-            y = grouped[("stream_savings_pct", "mean")].values
-            yerr = grouped[("stream_savings_pct", "sem")].values
+        # 4. Log-Scale Delta W Correlation (Grouped Means) - Both Standard and Clean Versions
+        for clean_mode in [False, True]:
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.4))
+            plt.subplots_adjust(bottom=0.20, top=0.88, wspace=0.28)
+            for idx, (z, ax) in enumerate([(1.0, ax1), (2.0, ax2)]):
+                if z not in q3_m20_cqp["z"].values:
+                    continue
+                sub = q3_m20_cqp[(q3_m20_cqp["z"] == z) & (q3_m20_cqp["k"] < 20)]
+                zs = z_styles[z]
+                grouped = sub.groupby("k")[["delta_w", "stream_savings_pct"]].agg(["mean", "sem"]).reset_index()
+                x = grouped[("delta_w", "mean")].values
+                y = grouped[("stream_savings_pct", "mean")].values
+                yerr = grouped[("stream_savings_pct", "sem")].values
 
-            ax.errorbar(
-                x, y, yerr=yerr, fmt=zs["marker"], markersize=8, capsize=4,
-                color=zs["color"], markeredgecolor="black", markeredgewidth=1.0,
-                linewidth=1.8, label=f"Mean per Rank k (z={z})"
-            )
-            log_x = np.log10(x)
-            slope, intercept, r_val, p_val, _ = stats.linregress(log_x, y)
-            x_grid = np.geomspace(x.min(), x.max(), 100)
-            ax.plot(x_grid, slope * np.log10(x_grid) + intercept, color="#d62728", linestyle="--", linewidth=2.0, label=f"Log-Linear Fit (r = {r_val:.2f})")
+                ax.errorbar(
+                    x, y, yerr=yerr, fmt=zs["marker"], markersize=8, capsize=4,
+                    color=zs["color"], markeredgecolor="black", markeredgewidth=1.0,
+                    linewidth=1.8, label=f"Mean per Rank k (z={z})"
+                )
+                log_x = np.log10(x)
+                slope, intercept, r_val, p_val, _ = stats.linregress(log_x, y)
+                if not clean_mode:
+                    x_grid = np.geomspace(x.min(), x.max(), 100)
+                    ax.plot(x_grid, slope * np.log10(x_grid) + intercept, color="#d62728", linestyle="--", linewidth=2.0, label=f"Log-Linear Fit (r = {r_val:.2f})")
 
-            rho_val, _ = stats.spearmanr(x, y)
-            p_pow = int(np.floor(np.log10(max(p_val, 1e-100))))
-            p_display = f"$p < 10^{{{p_pow}}}$" if p_val < 0.001 else f"$p = {p_val:.3f}$"
-            stats_text = (
-                f"Pearson $r = {r_val:.3f}$ ({p_display})\n"
-                f"Spearman $\\rho = {rho_val:.3f}$\n"
-                f"$R^2 = {r_val**2:.3f}$\n"
-                f"Slope: ${slope:+.2f}\\%$ / decade"
-            )
-            ax.text(
-                0.05, 0.93, stats_text, transform=ax.transAxes,
-                fontsize=11.5, verticalalignment="top",
-                bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#cccccc", alpha=0.92)
-            )
-            ax.set_xscale("log")
-            ax.set_xlabel(r"Weight Gap $\Delta W = W_k - W_{k+1}$ (Log Scale)", fontsize=14)
-            if idx == 0:
-                ax.set_ylabel("Stream Ingestion Saved (%)", fontsize=14)
-            ax.set_title(fr"Q3 (M=20, z={z}) Log-$\Delta W$ Correlation", fontsize=15)
-            ax.grid(True, which="both", linestyle="--", alpha=0.5)
-            ax.legend(loc="lower right", fontsize=11, frameon=True)
-        save_figure(fig, out_dir / "part_b" / "fig2g_q3_m20_delta_w_log_correlation_grouped", profile)
+                if clean_mode:
+                    stats_text = (
+                        f"Pearson $r = {r_val:.3f}$\n"
+                        f"$R^2 = {r_val**2:.3f}$"
+                    )
+                else:
+                    rho_val, _ = stats.spearmanr(x, y)
+                    p_pow = int(np.floor(np.log10(max(p_val, 1e-100))))
+                    p_display = f"$p < 10^{{{p_pow}}}$" if p_val < 0.001 else f"$p = {p_val:.3f}$"
+                    stats_text = (
+                        f"Pearson $r = {r_val:.3f}$ ({p_display})\n"
+                        f"Spearman $\\rho = {rho_val:.3f}$\n"
+                        f"$R^2 = {r_val**2:.3f}$\n"
+                        f"Slope: ${slope:+.2f}\\%$ / decade"
+                    )
+                ax.text(
+                    0.05, 0.93, stats_text, transform=ax.transAxes,
+                    fontsize=12, verticalalignment="top",
+                    bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#cccccc", alpha=0.92)
+                )
+                ax.set_xscale("log")
+                ax.set_xlabel(r"Weight Gap $\Delta W = W_k - W_{k+1}$ (Log Scale)", fontsize=14)
+                if idx == 0:
+                    ax.set_ylabel("Stream Ingestion Saved (%)", fontsize=14)
+                ax.set_title(fr"Q3 (M=20, z={z}) Log-$\Delta W$ Correlation", fontsize=15)
+                ax.grid(True, which="both", linestyle="--", alpha=0.5)
+                if not clean_mode:
+                    ax.legend(loc="lower right", fontsize=11, frameon=True)
+            suffix = "_clean" if clean_mode else ""
+            save_figure(fig, out_dir / "part_b" / f"fig2g_q3_m20_delta_w_log_correlation_grouped{suffix}", profile)
 
         # 5. Relative Ratio W_k / W_{k+1} in Normal Scale (Grouped Means) - 2-Panel
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.0, 4.2))
@@ -1455,93 +1939,107 @@ def plot_part_b_topk(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
             ax.set_xlabel(r"Weight Gap $\Delta W = W_k - W_{k+1}$", fontsize=13)
     save_figure(fig, out_dir / "part_b" / "fig2g_frozen_slices_grid", profile)
 
-    # Grid 2: Log-Scale Delta W (Grouped Means)
-    fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.5))
-    plt.subplots_adjust(hspace=0.32, wspace=0.25, bottom=0.10, top=0.92)
-    for idx, cfg in enumerate(slice_configs):
-        r_idx, c_idx = idx // 2, idx % 2
-        ax = axes[r_idx, c_idx]
-        scale_target = m20_scale_val if cfg["M"] == 20 else 0.5
-        sub = df[(df["query"] == cfg["query"]) & (df["M"] == cfg["M"]) & (df["z"] == cfg["z"]) & 
-                 (df["dataset_scale"] == scale_target) & (df["strategy"] == "CQP") & (df["k"] < cfg["M"])].copy()
-        if sub.empty:
-            continue
-        dws = []
-        for _, row in sub.iterrows():
-            w = get_distribution_weights("zipf", cfg["M"], cfg["z"], c=1)
-            g = compute_gap_metrics(w, int(row["k"]))
-            dws.append(g["delta_w"])
-        sub["delta_w"] = dws
+    # Grid 2: Log-Scale Delta W (Grouped Means) - Both Standard and Clean Versions
+    for clean_mode in [False, True]:
+        fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.5))
+        plt.subplots_adjust(hspace=0.32, wspace=0.25, bottom=0.10, top=0.92)
+        for idx, cfg in enumerate(slice_configs):
+            r_idx, c_idx = idx // 2, idx % 2
+            ax = axes[r_idx, c_idx]
+            scale_target = m20_scale_val if cfg["M"] == 20 else 0.5
+            sub = df[(df["query"] == cfg["query"]) & (df["M"] == cfg["M"]) & (df["z"] == cfg["z"]) & 
+                     (df["dataset_scale"] == scale_target) & (df["strategy"] == "CQP") & (df["k"] < cfg["M"])].copy()
+            if sub.empty:
+                continue
+            dws = []
+            for _, row in sub.iterrows():
+                w = get_distribution_weights("zipf", cfg["M"], cfg["z"], c=1)
+                g = compute_gap_metrics(w, int(row["k"]))
+                dws.append(g["delta_w"])
+            sub["delta_w"] = dws
 
-        grouped = sub.groupby("k")[["delta_w", "stream_savings_pct"]].agg(["mean", "sem"]).reset_index()
-        x = grouped[("delta_w", "mean")].values
-        y = grouped[("stream_savings_pct", "mean")].values
-        yerr = grouped[("stream_savings_pct", "sem")].values
+            grouped = sub.groupby("k")[["delta_w", "stream_savings_pct"]].agg(["mean", "sem"]).reset_index()
+            x = grouped[("delta_w", "mean")].values
+            y = grouped[("stream_savings_pct", "mean")].values
+            yerr = grouped[("stream_savings_pct", "sem")].values
 
-        ax.errorbar(x, y, yerr=yerr, fmt=cfg["marker"], markersize=7.5, capsize=3.5,
-                    color=cfg["color"], markeredgecolor="black", markeredgewidth=1.0, linewidth=1.8)
+            ax.errorbar(x, y, yerr=yerr, fmt=cfg["marker"], markersize=7.5, capsize=3.5,
+                        color=cfg["color"], markeredgecolor="black", markeredgewidth=1.0, linewidth=1.8)
 
-        log_x = np.log10(x)
-        slope, intercept, r_val, p_val, _ = stats.linregress(log_x, y) if len(x) > 2 else (0.0, 0.0, 1.0, 0.0, 0.0)
-        x_grid = np.geomspace(x.min(), x.max(), 100)
-        ax.plot(x_grid, slope * np.log10(x_grid) + intercept, color="#d62728", linestyle="--", linewidth=1.8)
+            log_x = np.log10(x)
+            slope, intercept, r_val, p_val, _ = stats.linregress(log_x, y) if len(x) > 2 else (0.0, 0.0, 1.0, 0.0, 0.0)
+            if not clean_mode:
+                x_grid = np.geomspace(x.min(), x.max(), 100)
+                ax.plot(x_grid, slope * np.log10(x_grid) + intercept, color="#d62728", linestyle="--", linewidth=1.8)
 
-        p_pow = int(np.floor(np.log10(max(p_val, 1e-100))))
-        p_str = f"$p < 10^{{{p_pow}}}$" if p_val < 0.001 else f"$p = {p_val:.3f}$"
-        stats_text = f"Mean per $k$: $r = {r_val:.3f}$ ({p_str})\n$R^2 = {r_val**2:.3f}$"
-        ax.text(0.05, 0.92, stats_text, transform=ax.transAxes, fontsize=11, verticalalignment="top",
-                bbox=dict(boxstyle="round,pad=0.35", facecolor="white", edgecolor="#cccccc", alpha=0.92))
-        ax.set_xscale("log")
-        ax.set_title(cfg["title"], fontsize=14)
-        ax.grid(True, which="both", linestyle="--", alpha=0.5)
-        if c_idx == 0:
-            ax.set_ylabel("Stream Savings (%)", fontsize=13)
-        if r_idx == 1:
-            ax.set_xlabel(r"Weight Gap $\Delta W = W_k - W_{k+1}$ (Log Scale)", fontsize=13)
-    save_figure(fig, out_dir / "part_b" / "fig2g_frozen_slices_grid_delta_w_log_grouped", profile)
+            if clean_mode:
+                stats_text = f"Pearson $r = {r_val:.3f}$\n$R^2 = {r_val**2:.3f}$"
+            else:
+                p_pow = int(np.floor(np.log10(max(p_val, 1e-100))))
+                p_str = f"$p < 10^{{{p_pow}}}$" if p_val < 0.001 else f"$p = {p_val:.3f}$"
+                stats_text = f"Mean per $k$: $r = {r_val:.3f}$ ({p_str})\n$R^2 = {r_val**2:.3f}$"
 
-    # Grid 3: Normal-Scale Ratio W_k / W_{k+1} (Grouped Means)
-    fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.5))
-    plt.subplots_adjust(hspace=0.32, wspace=0.25, bottom=0.10, top=0.92)
-    for idx, cfg in enumerate(slice_configs):
-        r_idx, c_idx = idx // 2, idx % 2
-        ax = axes[r_idx, c_idx]
-        scale_target = m20_scale_val if cfg["M"] == 20 else 0.5
-        sub = df[(df["query"] == cfg["query"]) & (df["M"] == cfg["M"]) & (df["z"] == cfg["z"]) & 
-                 (df["dataset_scale"] == scale_target) & (df["strategy"] == "CQP") & (df["k"] < cfg["M"])].copy()
-        if sub.empty:
-            continue
-        ratios_list = []
-        for _, row in sub.iterrows():
-            w = get_distribution_weights("zipf", cfg["M"], cfg["z"], c=1)
-            g = compute_gap_metrics(w, int(row["k"]))
-            ratios_list.append(g["ratio_w"])
-        sub["ratio_w"] = ratios_list
+            ax.text(0.05, 0.92, stats_text, transform=ax.transAxes, fontsize=12, verticalalignment="top",
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="white", edgecolor="#cccccc", alpha=0.92))
+            ax.set_xscale("log")
+            ax.set_title(cfg["title"], fontsize=14)
+            ax.grid(True, which="both", linestyle="--", alpha=0.5)
+            if c_idx == 0:
+                ax.set_ylabel("Stream Savings (%)", fontsize=13)
+            if r_idx == 1:
+                ax.set_xlabel(r"Weight Gap $\Delta W = W_k - W_{k+1}$ (Log Scale)", fontsize=13)
+        suffix = "_clean" if clean_mode else ""
+        save_figure(fig, out_dir / "part_b" / f"fig2g_frozen_slices_grid_delta_w_log_grouped{suffix}", profile)
 
-        grouped = sub.groupby("k")[["ratio_w", "stream_savings_pct"]].agg(["mean", "sem"]).reset_index()
-        x = grouped[("ratio_w", "mean")].values
-        y = grouped[("stream_savings_pct", "mean")].values
-        yerr = grouped[("stream_savings_pct", "sem")].values
+    # Grid 3: Normal-Scale Ratio W_k / W_{k+1} (Grouped Means) - Both Standard and Clean Versions
+    for clean_mode in [False, True]:
+        fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.5))
+        plt.subplots_adjust(hspace=0.32, wspace=0.25, bottom=0.10, top=0.92)
+        for idx, cfg in enumerate(slice_configs):
+            r_idx, c_idx = idx // 2, idx % 2
+            ax = axes[r_idx, c_idx]
+            scale_target = m20_scale_val if cfg["M"] == 20 else 0.5
+            sub = df[(df["query"] == cfg["query"]) & (df["M"] == cfg["M"]) & (df["z"] == cfg["z"]) & 
+                     (df["dataset_scale"] == scale_target) & (df["strategy"] == "CQP") & (df["k"] < cfg["M"])].copy()
+            if sub.empty:
+                continue
+            ratios_list = []
+            for _, row in sub.iterrows():
+                w = get_distribution_weights("zipf", cfg["M"], cfg["z"], c=1)
+                g = compute_gap_metrics(w, int(row["k"]))
+                ratios_list.append(g["ratio_w"])
+            sub["ratio_w"] = ratios_list
 
-        ax.errorbar(x, y, yerr=yerr, fmt=cfg["marker"], markersize=7.5, capsize=3.5,
-                    color=cfg["color"], markeredgecolor="black", markeredgewidth=1.0, linewidth=1.8)
+            grouped = sub.groupby("k")[["ratio_w", "stream_savings_pct"]].agg(["mean", "sem"]).reset_index()
+            x = grouped[("ratio_w", "mean")].values
+            y = grouped[("stream_savings_pct", "mean")].values
+            yerr = grouped[("stream_savings_pct", "sem")].values
 
-        slope, intercept, r_val, p_val, _ = stats.linregress(x, y) if len(x) > 2 else (0.0, 0.0, 1.0, 0.0, 0.0)
-        x_line = np.linspace(x.min(), x.max(), 100)
-        ax.plot(x_line, slope * x_line + intercept, color="#d62728", linestyle="--", linewidth=1.8)
+            ax.errorbar(x, y, yerr=yerr, fmt=cfg["marker"], markersize=7.5, capsize=3.5,
+                        color=cfg["color"], markeredgecolor="black", markeredgewidth=1.0, linewidth=1.8)
 
-        p_pow = int(np.floor(np.log10(max(p_val, 1e-100))))
-        p_str = f"$p < 10^{{{p_pow}}}$" if p_val < 0.001 else f"$p = {p_val:.3f}$"
-        stats_text = f"Mean per $k$: $r = {r_val:.3f}$ ({p_str})\n$R^2 = {r_val**2:.3f}$"
-        ax.text(0.05, 0.92, stats_text, transform=ax.transAxes, fontsize=11, verticalalignment="top",
-                bbox=dict(boxstyle="round,pad=0.35", facecolor="white", edgecolor="#cccccc", alpha=0.92))
-        ax.set_title(cfg["title"], fontsize=14)
-        ax.grid(True, linestyle="--", alpha=0.5)
-        if c_idx == 0:
-            ax.set_ylabel("Stream Savings (%)", fontsize=13)
-        if r_idx == 1:
-            ax.set_xlabel(r"Weight Ratio $R_W = W_k / W_{k+1}$ (Normal Scale)", fontsize=13)
-    save_figure(fig, out_dir / "part_b" / "fig2g_frozen_slices_grid_ratio_w_grouped", profile)
+            slope, intercept, r_val, p_val, _ = stats.linregress(x, y) if len(x) > 2 else (0.0, 0.0, 1.0, 0.0, 0.0)
+            if not clean_mode:
+                x_line = np.linspace(x.min(), x.max(), 100)
+                ax.plot(x_line, slope * x_line + intercept, color="#d62728", linestyle="--", linewidth=1.8)
+
+            if clean_mode:
+                stats_text = f"Pearson $r = {r_val:.3f}$\n$R^2 = {r_val**2:.3f}$"
+            else:
+                p_pow = int(np.floor(np.log10(max(p_val, 1e-100))))
+                p_str = f"$p < 10^{{{p_pow}}}$" if p_val < 0.001 else f"$p = {p_val:.3f}$"
+                stats_text = f"Mean per $k$: $r = {r_val:.3f}$ ({p_str})\n$R^2 = {r_val**2:.3f}$"
+
+            ax.text(0.05, 0.92, stats_text, transform=ax.transAxes, fontsize=12, verticalalignment="top",
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="white", edgecolor="#cccccc", alpha=0.92))
+            ax.set_title(cfg["title"], fontsize=14)
+            ax.grid(True, linestyle="--", alpha=0.5)
+            if c_idx == 0:
+                ax.set_ylabel("Stream Savings (%)", fontsize=13)
+            if r_idx == 1:
+                ax.set_xlabel(r"Weight Ratio $R_W = W_k / W_{k+1}$ (Normal Scale)", fontsize=13)
+        suffix = "_clean" if clean_mode else ""
+        save_figure(fig, out_dir / "part_b" / f"fig2g_frozen_slices_grid_ratio_w_grouped{suffix}", profile)
 
 
 # =========================================================================
@@ -1624,10 +2122,10 @@ def plot_part_c_calibration(df: pd.DataFrame, out_dir: Path, profile: str = "pap
     )
     save_figure(fig, out_dir / "part_c" / "fig3b_alpha_tau_thresholds", profile)
 
-    # --- Fig 3c: Calibrated Tau Line Plots Relative Percentage Scale (+/- 10%, lines every 2.5%) ---
+    # --- Fig 3c: Calibrated Tau Line Plots Relative Percentage Scale (+/- 7.5%, lines every 2.5%) ---
     def render_fig3c(show_on_point_labels: bool, filename_suffix: str = ""):
-        fig, axes = plt.subplots(1, 6, figsize=(18, 2.9), sharey=True)
-        plt.subplots_adjust(bottom=0.28, wspace=0.18, top=0.88)
+        fig, axes = plt.subplots(1, 6, figsize=(19.0, 3.8), sharey=True)
+        plt.subplots_adjust(bottom=0.28, left=0.08, right=0.98, wspace=0.22, top=0.86)
         for idx, q in enumerate(queries):
             ax = axes[idx]
             q_name = QUERY_INFO[q]["name"]
@@ -1643,11 +2141,11 @@ def plot_part_c_calibration(df: pd.DataFrame, out_dir: Path, profile: str = "pap
             ax.plot(alphas, pct_devs, marker="o", markersize=7, color="#0072B2", linewidth=2.0, zorder=4)
             ax.axhline(0.0, color="#333333", linestyle="-", linewidth=1.2, zorder=3)
 
-            # Grid lines every 2.5% between -10% and +10%
-            grid_ticks = np.arange(-10.0, 10.1, 2.5)
+            # Grid lines every 2.5% between -7.5% and +7.5%
+            grid_ticks = np.arange(-7.5, 7.6, 2.5)
             ax.set_yticks(grid_ticks)
-            ax.set_yticklabels([f"{t:+.1f}%" if t % 1 != 0 else (f"{int(t):+d}%" if t != 0 else "0%") for t in grid_ticks], fontsize=11.5)
-            ax.set_ylim(-10, 10)
+            ax.set_yticklabels([f"{t:+.1f}%" if t % 1 != 0 else (f"{int(t):+d}%" if t != 0 else "0%") for t in grid_ticks], fontsize=13)
+            ax.set_ylim(-7.5, 7.5)
 
             # Point value annotations (if enabled)
             if show_on_point_labels:
@@ -1655,22 +2153,22 @@ def plot_part_c_calibration(df: pd.DataFrame, out_dir: Path, profile: str = "pap
                     ax.annotate(
                         f"{dev:+.1f}%", (a_val, dev),
                         textcoords="offset points", xytext=(0, 7 if dev >= 0 else -14),
-                        ha="center", fontsize=11.5, fontweight="bold", color="#0072B2"
+                        ha="center", fontsize=12.5, fontweight="bold", color="#0072B2"
                     )
 
             # Reference value text at bottom (preserved in both versions)
             ax.text(
                 0.5, 0.08, f"Ref $\\tau_{{0.05}}={format_sigfigs(tau_ref, 3, max_decimals=3)}$",
-                transform=ax.transAxes, ha="center", fontsize=11.5,
-                bbox=dict(boxstyle="round,pad=0.2", facecolor="#f0f0f0", edgecolor="#cccccc", alpha=0.9)
+                transform=ax.transAxes, ha="center", fontsize=12.5,
+                bbox=dict(boxstyle="round,pad=0.25", facecolor="#f0f0f0", edgecolor="#cccccc", alpha=0.9)
             )
 
-            ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
+            ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=16, pad=8)
             ax.set_xticks(alphas)
-            ax.set_xticklabels([f"α={a:.2f}" for a in alphas], fontsize=13)
-            ax.set_xlabel("Significance (α)", fontsize=14)
+            ax.set_xticklabels([f"α={a:.2f}" for a in alphas], fontsize=14)
+            ax.set_xlabel("Significance (α)", fontsize=15)
             if idx == 0:
-                ax.set_ylabel("Relative Deviation from $\\tau_{0.05}$ (%)", fontsize=15)
+                ax.set_ylabel("Relative Deviation\nfrom $\\tau_{0.05}$", fontsize=16)
 
         save_figure(fig, out_dir / "part_c" / f"fig3c_tau_relative_percent_lines{filename_suffix}", profile)
 
@@ -1678,10 +2176,10 @@ def plot_part_c_calibration(df: pd.DataFrame, out_dir: Path, profile: str = "pap
     render_fig3c(show_on_point_labels=True, filename_suffix="")
     render_fig3c(show_on_point_labels=False, filename_suffix="_nolabels")
 
-    # --- Fig 3d: Calibrated Tau Line Plots True Values up to 3 Significant Figures / 3 Decimals (+/- 10%, lines every 2.5%) ---
+    # --- Fig 3d: Calibrated Tau Line Plots True Values up to 3 Significant Figures / 3 Decimals (+/- 7.5%, lines every 2.5%) ---
     def render_fig3d(show_on_point_labels: bool, filename_suffix: str = ""):
-        fig, axes = plt.subplots(1, 6, figsize=(18, 2.9), sharey=False)
-        plt.subplots_adjust(bottom=0.28, wspace=0.34, top=0.88)
+        fig, axes = plt.subplots(1, 6, figsize=(19.0, 3.8), sharey=False)
+        plt.subplots_adjust(bottom=0.28, left=0.08, right=0.98, wspace=0.34, top=0.86)
         for idx, q in enumerate(queries):
             ax = axes[idx]
             q_name = QUERY_INFO[q]["name"]
@@ -1697,15 +2195,15 @@ def plot_part_c_calibration(df: pd.DataFrame, out_dir: Path, profile: str = "pap
             ax.plot(alphas, tau_vals, marker="s", markersize=7, color="#D55E00", linewidth=2.0, zorder=4)
             ax.axhline(tau_ref, color="#333333", linestyle="-", linewidth=1.2, zorder=3)
 
-            # Bounds at +/- 10% from tau_ref
-            y_min = 0.90 * tau_ref
-            y_max = 1.10 * tau_ref
+            # Bounds at +/- 7.5% from tau_ref
+            y_min = 0.925 * tau_ref
+            y_max = 1.075 * tau_ref
             ax.set_ylim(y_min, y_max)
 
             # Grid lines and ticks at every 2.5%
-            grid_ticks = [tau_ref * (1.0 + 0.025 * i) for i in range(-4, 5)]
+            grid_ticks = [tau_ref * (1.0 + 0.025 * i) for i in range(-3, 4)]
             ax.set_yticks(grid_ticks)
-            ax.set_yticklabels([format_sigfigs(t, 3, max_decimals=3) for t in grid_ticks], fontsize=11.5)
+            ax.set_yticklabels([format_sigfigs(t, 3, max_decimals=3) for t in grid_ticks], fontsize=13)
 
             # Point value annotations formatted to 3 sigfigs with max 3 decimals (if enabled)
             if show_on_point_labels:
@@ -1713,15 +2211,15 @@ def plot_part_c_calibration(df: pd.DataFrame, out_dir: Path, profile: str = "pap
                     ax.annotate(
                         format_sigfigs(t_val, 3, max_decimals=3), (a_val, t_val),
                         textcoords="offset points", xytext=(0, 7 if t_val >= tau_ref else -14),
-                        ha="center", fontsize=11.5, fontweight="bold", color="#D55E00"
+                        ha="center", fontsize=12.5, fontweight="bold", color="#D55E00"
                     )
 
-            ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=15, pad=6)
+            ax.set_title(q_name if profile == "presentation" else f"({chr(97+idx)}) {q_name}", fontsize=16, pad=8)
             ax.set_xticks(alphas)
-            ax.set_xticklabels([f"α={a:.2f}" for a in alphas], fontsize=13)
-            ax.set_xlabel("Significance (α)", fontsize=14)
+            ax.set_xticklabels([f"α={a:.2f}" for a in alphas], fontsize=14)
+            ax.set_xlabel("Significance (α)", fontsize=15)
             if idx == 0:
-                ax.set_ylabel("Threshold $\\tau_\\alpha$ (3 Sig Figs / 3 Dec)", fontsize=15)
+                ax.set_ylabel("Threshold $\\tau_\\alpha$\n(3 Sig Figs)", fontsize=16)
 
         save_figure(fig, out_dir / "part_c" / f"fig3d_tau_absolute_sigfig_lines{filename_suffix}", profile)
 
@@ -1746,53 +2244,60 @@ def plot_part_d_scale(df: pd.DataFrame, out_dir: Path, profile: str = "paper"):
     baseline_map = get_baseline_map(df)
     scales = sorted(d_df["dataset_scale"].unique())
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8), sharey=False)
-    plt.subplots_adjust(bottom=0.25, wspace=0.30)
+    # Render primary (tuples) and alternative (scale only) versions
+    for mode in ["tuples", "scale_only"]:
+        fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.6), sharey=False)
+        plt.subplots_adjust(bottom=0.28, wspace=0.34, top=0.88)
 
-    legend_handles = {}
-    for idx, q in enumerate(["q3", "q4"]):
-        ax = axes[idx]
-        sub = d_df[d_df["query"] == q]
-        x = np.arange(len(scales))
-        bar_w = 0.28
+        legend_handles = {}
+        for idx, q in enumerate(["q3", "q4"]):
+            ax = axes[idx]
+            sub = d_df[d_df["query"] == q]
+            x = np.arange(len(scales))
+            bar_w = 0.28
 
-        for s_idx, s in enumerate(["Baseline", "CQP"]):
-            s_style = STRATEGY_STYLES[s]
-            offset = (s_idx - 0.5) * bar_w
-            means = []
-            sems = []
-            for sc in scales:
-                sc_sub = sub[(sub["dataset_scale"] == sc) & (sub["strategy"] == s)]
-                if not sc_sub.empty:
-                    means.append(sc_sub["engine_time_ms"].mean())
-                    sems.append(sc_sub["engine_time_ms"].sem() if not pd.isna(sc_sub["engine_time_ms"].sem()) else 0.0)
-                elif s == "Baseline" and (q, 1.0) in baseline_map:
-                    means.append(baseline_map[(q, 1.0)])
-                    sems.append(0.0)
-                else:
-                    means.append(0.0)
-                    sems.append(0.0)
+            for s_idx, s in enumerate(["Baseline", "CQP"]):
+                s_style = STRATEGY_STYLES[s]
+                offset = (s_idx - 0.5) * bar_w
+                means = []
+                sems = []
+                for sc in scales:
+                    sc_sub = sub[(sub["dataset_scale"] == sc) & (sub["strategy"] == s)]
+                    if not sc_sub.empty:
+                        means.append(sc_sub["engine_time_ms"].mean())
+                        sems.append(sc_sub["engine_time_ms"].sem() if not pd.isna(sc_sub["engine_time_ms"].sem()) else 0.0)
+                    elif s == "Baseline" and (q, 1.0) in baseline_map:
+                        means.append(baseline_map[(q, 1.0)])
+                        sems.append(0.0)
+                    else:
+                        means.append(0.0)
+                        sems.append(0.0)
 
-            bars = ax.bar(
-                x + offset, means, yerr=sems, width=bar_w,
-                color=s_style["color"], hatch=s_style["hatch"],
-                edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
-                capsize=3, label=s_style["label"]
-            )
-            if s_style["label"] not in legend_handles and len(bars) > 0:
-                legend_handles[s_style["label"]] = bars[0]
+                bars = ax.bar(
+                    x + offset, means, yerr=sems, width=bar_w,
+                    color=s_style["color"], hatch=s_style["hatch"],
+                    edgecolor=s_style["edgecolor"], linewidth=s_style["linewidth"],
+                    capsize=3, label=s_style["label"]
+                )
+                if s_style["label"] not in legend_handles and len(bars) > 0:
+                    legend_handles[s_style["label"]] = bars[0]
 
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"Scale {s:.1f} ({int(s*50)}k tuples)" for s in scales], fontsize=13)
-        ax.set_title(QUERY_INFO[q]["label"], fontsize=15)
-        if idx == 0:
-            ax.set_ylabel("Execution Time (ms)", fontsize=15)
+            ax.set_xticks(x)
+            if mode == "tuples":
+                ax.set_xticklabels([f"{int(s*50)}k tuples" for s in scales], fontsize=14, fontweight="bold")
+            else:
+                ax.set_xticklabels([f"Scale {s:.1f}" for s in scales], fontsize=14, fontweight="bold")
+            ax.set_title(QUERY_INFO[q]["label"], fontsize=16, fontweight="bold")
+            ax.tick_params(axis="y", labelsize=13)
+            if idx == 0:
+                ax.set_ylabel("Execution Time (ms)", fontsize=16, fontweight="bold")
 
-    fig.legend(
-        list(legend_handles.values()), list(legend_handles.keys()),
-        loc="lower center", ncol=2, frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
-    )
-    save_figure(fig, out_dir / "part_d" / "fig4_database_scale_linearity", profile)
+        fig.legend(
+            list(legend_handles.values()), list(legend_handles.keys()),
+            loc="lower center", ncol=2, frameon=True, fontsize=14, bbox_to_anchor=(0.5, 0.02)
+        )
+        suffix = "_scale_only" if mode == "scale_only" else ""
+        save_figure(fig, out_dir / "part_d" / f"fig4_database_scale_linearity{suffix}", profile)
 
 
 # =========================================================================
@@ -1843,7 +2348,7 @@ def plot_part_e_ablations(df: pd.DataFrame, out_dir: Path, profile: str = "paper
     ]
 
     # --- 1. fig5a: Single Unified Grouped Bar Chart (Grouped by Query) ---
-    figsize_a = (8.6, 5.0) if profile == "paper" else (9.6, 5.5)
+    figsize_a = (9.8, 5.6) if profile == "paper" else (10.8, 6.2)
     fig_a, ax_a = plt.subplots(figsize=figsize_a)
     plt.subplots_adjust(bottom=0.32, top=0.91, left=0.11, right=0.96)
 
@@ -1874,15 +2379,15 @@ def plot_part_e_ablations(df: pd.DataFrame, out_dir: Path, profile: str = "paper
             )
 
     ax_a.set_xticks(x_centers)
-    ax_a.set_xticklabels(q_labels, fontsize=15, fontweight="semibold")
-    ax_a.tick_params(axis="y", labelsize=14)
-    ax_a.set_ylabel("Execution Time (ms)", fontsize=16, fontweight="bold", labelpad=8)
+    ax_a.set_xticklabels(q_labels, fontsize=16.5, fontweight="bold")
+    ax_a.tick_params(axis="y", labelsize=15)
+    ax_a.set_ylabel("Execution Time (ms)", fontsize=17.5, fontweight="bold", labelpad=8)
     ax_a.set_ylim(0, 32)
-    ax_a.set_title("Strategy Capability Ablation (M=10, k=3, z=1.0)", fontsize=17, fontweight="bold", pad=12)
+    ax_a.set_title("Strategy Capability Ablation (M=10, k=3, z=1.0)", fontsize=18, fontweight="bold", pad=12)
     ax_a.grid(True, linestyle="--", alpha=0.4, axis="y")
     ax_a.legend(
         handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.21),
-        ncol=3, frameon=True, fontsize=13.0, handlelength=1.8, handleheight=1.1,
+        ncol=3, frameon=True, fontsize=14.5, handlelength=1.8, handleheight=1.1,
         columnspacing=1.1, borderpad=0.6
     )
 
@@ -1890,7 +2395,7 @@ def plot_part_e_ablations(df: pd.DataFrame, out_dir: Path, profile: str = "paper
     save_figure(fig_a, out_dir / "part_e" / "fig5_strategy_capabilities_ablation", profile)
 
     # --- 2. fig5b: 3-Panel Strip (Skinnier Subplots) ---
-    figsize_b = (10.8, 4.0) if profile == "paper" else (12.0, 4.4)
+    figsize_b = (12.5, 4.8) if profile == "paper" else (13.8, 5.2)
     fig_b, axes_b = plt.subplots(1, 3, figsize=figsize_b, sharey=True)
     plt.subplots_adjust(bottom=0.28, wspace=0.18, top=0.88, left=0.09, right=0.97)
 
@@ -1921,17 +2426,17 @@ def plot_part_e_ablations(df: pd.DataFrame, out_dir: Path, profile: str = "paper
             )
 
         ax.set_xticks([])
-        ax.set_title(q_title, fontsize=14, fontweight="semibold")
-        ax.tick_params(axis="y", labelsize=13)
+        ax.set_title(q_title, fontsize=16, fontweight="bold")
+        ax.tick_params(axis="y", labelsize=14)
         if q_idx == 0:
-            ax.set_ylabel("Execution Time (ms)", fontsize=15, fontweight="bold")
+            ax.set_ylabel("Execution Time (ms)", fontsize=16.5, fontweight="bold")
         ax.set_ylim(0, 32)
         ax.set_xlim(-(N + 1) * bar_w / 2.0, (N + 1) * bar_w / 2.0)
         ax.grid(True, linestyle="--", alpha=0.4, axis="y")
 
     fig_b.legend(
         handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.02),
-        ncol=5, frameon=True, fontsize=12.0, handlelength=1.6, handleheight=1.0,
+        ncol=5, frameon=True, fontsize=13.5, handlelength=1.6, handleheight=1.0,
         columnspacing=1.0
     )
 
@@ -1983,7 +2488,7 @@ def plot_part_e_ablations(df: pd.DataFrame, out_dir: Path, profile: str = "paper
 def main():
     parser = argparse.ArgumentParser(description="Generate V3 Publication & Presentation Charts.")
     parser.add_argument("--results-dir", type=str, default="prod_sweep_results_oct13_3pm/paper_focused_quick_results_oct13_3pm/results/paper_focused_quick")
-    parser.add_argument("--figures-dir", type=str, default="prod_sweep_results_oct13_3pm/paper_focused_quick_results_oct13_3pm/results/paper_focused_quick/figures_v3")
+    parser.add_argument("--figures-dir", type=str, default=None)
     parser.add_argument("--supplementary-dirs", nargs="*", default=[
         "prod_sweep_results_oct13_3pm/paper_focused_quick_results_oct13_3pm/results/scale_1_0",
         "prod_sweep_results_oct13_3pm/paper_focused_quick_results_oct13_3pm/results/mcdb_flat",
@@ -1991,7 +2496,7 @@ def main():
     args = parser.parse_args()
 
     results_dir = Path(args.results_dir)
-    figures_dir = Path(args.figures_dir)
+    figures_dir = Path(args.figures_dir) if args.figures_dir else results_dir / "figures_v3"
     supp_dirs = [Path(d) for d in args.supplementary_dirs]
 
     print("=================================================================")

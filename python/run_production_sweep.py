@@ -89,14 +89,18 @@ def run_orchestrated_sweep(
     dataset_scale = float(preset_cfg.get("dataset_scale", 1.0))
     unified_records: List[Dict[str, Any]] = []
 
+    # If selected_queries was not passed via CLI, restrict strictly to the queries defined in this preset
+    preset_query_keys = list(queries_cfg.keys()) if queries_cfg else None
+    active_queries = selected_queries if selected_queries is not None else preset_query_keys
+
     # Run Vision COCO (Q1a / Q2a)
-    if not selected_queries or any(q in ["q1a", "q2a"] for q in selected_queries):
+    if not active_queries or any(q in ["q1a", "q2a"] for q in active_queries):
         print("\n>>> Phase 2.1: Executing Vision COCO (Q1a & Q2a)...")
         t_coco = profiler.start_task("vision_coco_runner")
         coco_cache_dir = cache_dir / "vision_coco" if (cache_dir / "vision_coco").exists() else cache_dir / "coco"
         coco_out_dir = output_base_dir / "vision_coco"
-        q1_needed = not selected_queries or "q1a" in selected_queries
-        q2_needed = not selected_queries or "q2a" in selected_queries
+        q1_needed = not active_queries or "q1a" in active_queries
+        q2_needed = not active_queries or "q2a" in active_queries
 
         coco_cfg = queries_cfg.get("q1a", {}) or queries_cfg.get("q2a", {})
         log_path = run_vision_coco_sweep(
@@ -117,13 +121,13 @@ def run_orchestrated_sweep(
         profiler.record_task_time("vision_coco_runner", t_coco)
 
     # Run Text Jigsaw (Q1b / Q2b)
-    if not selected_queries or any(q in ["q1b", "q2b"] for q in selected_queries):
+    if not active_queries or any(q in ["q1b", "q2b"] for q in active_queries):
         print("\n>>> Phase 2.2: Executing Text Jigsaw (Q1b & Q2b)...")
         t_jig = profiler.start_task("text_jigsaw_runner")
         jig_cache_dir = cache_dir / "text_jigsaw" if (cache_dir / "text_jigsaw").exists() else cache_dir / "jigsaw"
         jig_out_dir = output_base_dir / "text_jigsaw"
-        q1_needed = not selected_queries or "q1b" in selected_queries
-        q2_needed = not selected_queries or "q2b" in selected_queries
+        q1_needed = not active_queries or "q1b" in active_queries
+        q2_needed = not active_queries or "q2b" in active_queries
 
         jig_cfg = queries_cfg.get("q1b", {}) or queries_cfg.get("q2b", {})
         log_path = run_text_jigsaw_sweep(
@@ -144,7 +148,7 @@ def run_orchestrated_sweep(
         profiler.record_task_time("text_jigsaw_runner", t_jig)
 
     # Run TPC-H Q3
-    if not selected_queries or "q3" in selected_queries:
+    if not active_queries or "q3" in active_queries:
         print("\n>>> Phase 2.3: Executing Relational TPC-H Q3...")
         t_q3 = profiler.start_task("relational_q3_runner")
         q3_cfg = queries_cfg.get("q3", {})
@@ -172,7 +176,7 @@ def run_orchestrated_sweep(
         profiler.record_task_time("relational_q3_runner", t_q3)
 
     # Run TPC-H Q4
-    if not selected_queries or "q4" in selected_queries:
+    if not active_queries or "q4" in active_queries:
         print("\n>>> Phase 2.4: Executing Relational TPC-H Q4 (TPC-H Q10)...")
         t_q4 = profiler.start_task("relational_q4_runner")
         q4_cfg = queries_cfg.get("q4", {})
@@ -274,6 +278,19 @@ def run_orchestrated_sweep(
             ], check=True)
         except Exception as e:
             print(f"Notice: generate_paper_charts_v3.py finished or skipped with: {e}")
+
+    # Render extended Part E ablation variations if generator exists
+    if (PACKAGE_DIR / "generate_part_e_variations.py").exists():
+        try:
+            print("\n>>> Generating Extended Part E Ablation Variations...")
+            subprocess.run([
+                sys.executable,
+                str(PACKAGE_DIR / "generate_part_e_variations.py"),
+                "--results-dir", str(output_base_dir),
+                "--output-dir", str(output_base_dir / "figures_v3"),
+            ], check=True)
+        except Exception as e:
+            print(f"Notice: generate_part_e_variations.py finished or skipped with: {e}")
 
     print("==========================================================================")
     print(f"✓ Orchestrated Sweep Finished Successfully in {time.time() - total_start:.1f}s!")

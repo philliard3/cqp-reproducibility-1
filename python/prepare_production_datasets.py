@@ -273,7 +273,8 @@ def get_cached_or_generate_dataset(
             zipf_skew=z,
             contender_c=c,
             seed=seed,
-            branching_mode="uniform" if "uniform" in branching else "poisson",
+            branching_mode="uniform_tpch" if "uniform" in branching else "poisson4",
+            prob_mode="uniform",
         )
     elif "tpch_q10" in domain:
         n_tuples = int(50000 * scale)
@@ -283,6 +284,8 @@ def get_cached_or_generate_dataset(
             zipf_skew=z,
             seed=seed,
             include_mc_bits=True,
+            branching_mode="uniform_tpch" if "uniform" in branching else "poisson4",
+            prob_mode="uniform",
         )
     else:
         raise ValueError(f"Unknown domain: {domain}")

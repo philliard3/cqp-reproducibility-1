@@ -81,15 +81,16 @@ pub struct AlphaThresholdEntry {
     pub avg_set_size: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct RankThresholdEntry {
+    #[serde(default)]
     pub recall_at_k: f64,
-    #[serde(rename = "alpha_0.01")]
-    pub alpha_0_01: AlphaThresholdEntry,
-    #[serde(rename = "alpha_0.05")]
-    pub alpha_0_05: AlphaThresholdEntry,
-    #[serde(rename = "alpha_0.10")]
-    pub alpha_0_10: AlphaThresholdEntry,
+    #[serde(rename = "alpha_0.01", default)]
+    pub alpha_0_01: Option<AlphaThresholdEntry>,
+    #[serde(rename = "alpha_0.05", default)]
+    pub alpha_0_05: Option<AlphaThresholdEntry>,
+    #[serde(rename = "alpha_0.10", default)]
+    pub alpha_0_10: Option<AlphaThresholdEntry>,
 }
 
 pub type CalibrationMatrix = FxHashMap<String, FxHashMap<String, FxHashMap<String, RankThresholdEntry>>>;
@@ -412,12 +413,17 @@ fn main() {
                     let rank_entry_opt = rank_map.get(&format!("k_{}", k)).or_else(|| rank_map.get(&format!("rank_{}", k)));
                     if let Some(rank_entry) = rank_entry_opt {
                         for &alpha in &alphas {
-                            let (tau, is_valid, target_cov) = if (alpha - 0.01f64).abs() < 1e-4 {
-                                (rank_entry.alpha_0_01.tau, rank_entry.alpha_0_01.is_valid_guarantee, rank_entry.alpha_0_01.target_coverage)
+                            let entry_opt = if (alpha - 0.01f64).abs() < 1e-4 {
+                                rank_entry.alpha_0_01.as_ref()
                             } else if (alpha - 0.05f64).abs() < 1e-4 {
-                                (rank_entry.alpha_0_05.tau, rank_entry.alpha_0_05.is_valid_guarantee, rank_entry.alpha_0_05.target_coverage)
+                                rank_entry.alpha_0_05.as_ref()
                             } else {
-                                (rank_entry.alpha_0_10.tau, rank_entry.alpha_0_10.is_valid_guarantee, rank_entry.alpha_0_10.target_coverage)
+                                rank_entry.alpha_0_10.as_ref()
+                            };
+
+                            let (tau, is_valid, target_cov) = match entry_opt {
+                                Some(e) => (e.tau, e.is_valid_guarantee, e.target_coverage),
+                                None => continue,
                             };
 
                             let (conf_emitted, conf_items, conf_ms) = run_flat_strategy(

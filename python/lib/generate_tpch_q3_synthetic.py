@@ -95,9 +95,9 @@ def generate_tpch_q3_dataset(
     stream_sort: str = "proxy",
     include_mc_bits: bool = True,
     price_mode: str = "high",
-    branching_mode: str = "poisson4",
+    branching_mode: str = "uniform_tpch",
     selectivity_mode: str = "default",
-    prob_mode: str = "smooth_beta",
+    prob_mode: str = "uniform",
 ) -> Dict[str, Any]:
     """
     Generates a full synthetic probabilistic TPC-H Q3 dataset.
@@ -107,9 +107,9 @@ def generate_tpch_q3_dataset(
 
     Ablation Parameters:
     - price_mode: "constant" ($10k uniform), "low" ($8k-$12k), "high" ($100-$5000/line, default)
-    - branching_mode: "1to1" (1 lineitem/order), "uniform_tpch", "poisson4" (Poisson(4) lineitems, default)
+    - branching_mode: "uniform_tpch" (Discrete Uniform U[1, 7], canonical TPC-H default), "1to1", "poisson4"
     - selectivity_mode: "full" (100% qualify), "default" (~10% qualify, default)
-    - prob_mode: "smooth_beta" (Beta(2, 2), default), "polarized_neural" (Bimodal 0.92 vs 0.03)
+    - prob_mode: "uniform" (Uniform U[p_min, p_max], canonical default), "smooth_beta" (Beta(2, 2)), "polarized_neural"
     """
     rng = np.random.Generator(np.random.PCG64(seed))
 
@@ -155,20 +155,23 @@ def generate_tpch_q3_dataset(
         high_draws = 0.85 + rng.beta(20.0, 2.0, size=n_orders) * 0.14  # [0.85, 0.99]
         low_draws = 0.001 + rng.beta(1.0, 30.0, size=n_orders) * 0.049 # [0.001, 0.05]
         order_probs = np.where(is_high, high_draws, low_draws)
-    else:
-        # Canonical smooth prior: Beta(2, 2) shifted to [p_min, p_max], mean ~ 0.55
+    elif prob_mode in ["smooth_beta", "beta"]:
+        # Legacy smooth prior: Beta(2, 2) shifted to [p_min, p_max], mean ~ 0.55
         raw_probs = rng.beta(2.0, 2.0, size=n_orders)
         order_probs = p_min + raw_probs * (p_max - p_min)
+    else:
+        # Canonical uniform prior: Uniform U[p_min, p_max]
+        order_probs = rng.uniform(p_min, p_max, size=n_orders)
 
     # 3. Generate LINEITEMS per order
     if branching_mode == "1to1":
         n_items_per_order = np.ones(n_orders, dtype=int)
-    elif branching_mode in ["uniform_tpch", "uniform"]:
-        # Canonical TPC-H Section 4.2.2.13: Discrete Uniform U[1, 7] (mean 4.0, variance 4.0)
-        n_items_per_order = rng.integers(1, 8, size=n_orders)
-    else:
+    elif branching_mode in ["poisson4", "poisson"]:
         # Clamped Poisson legacy option: Poisson(4) clamped [1, 7]
         n_items_per_order = np.clip(rng.poisson(4, size=n_orders), 1, 7)
+    else:
+        # Canonical TPC-H Section 4.2.2.13: Discrete Uniform U[1, 7] (mean 4.0, variance 4.0)
+        n_items_per_order = rng.integers(1, 8, size=n_orders)
     
     stream_tuples = []
     ground_truth_world_revenues = np.zeros((n_groups, n_mc_worlds), dtype=np.float64)

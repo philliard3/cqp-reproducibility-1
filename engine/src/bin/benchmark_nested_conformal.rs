@@ -73,15 +73,16 @@ pub struct AlphaThresholdEntry {
     pub avg_set_size: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct RankThresholdEntry {
+    #[serde(default)]
     pub recall_at_k: f64,
-    #[serde(rename = "alpha_0.01")]
-    pub alpha_0_01: AlphaThresholdEntry,
-    #[serde(rename = "alpha_0.05")]
-    pub alpha_0_05: AlphaThresholdEntry,
-    #[serde(rename = "alpha_0.10")]
-    pub alpha_0_10: AlphaThresholdEntry,
+    #[serde(rename = "alpha_0.01", default)]
+    pub alpha_0_01: Option<AlphaThresholdEntry>,
+    #[serde(rename = "alpha_0.05", default)]
+    pub alpha_0_05: Option<AlphaThresholdEntry>,
+    #[serde(rename = "alpha_0.10", default)]
+    pub alpha_0_10: Option<AlphaThresholdEntry>,
 }
 
 pub type CalibrationMatrix = FxHashMap<String, FxHashMap<String, FxHashMap<String, RankThresholdEntry>>>;
@@ -504,9 +505,9 @@ fn main() {
 
                 for &alpha in &alphas {
                     let th_entry = match (alpha * 100.0).round() as usize {
-                        1 => k_th_entry.map(|e| &e.alpha_0_01),
-                        5 => k_th_entry.map(|e| &e.alpha_0_05),
-                        10 => k_th_entry.map(|e| &e.alpha_0_10),
+                        1 => k_th_entry.and_then(|e| e.alpha_0_01.as_ref()),
+                        5 => k_th_entry.and_then(|e| e.alpha_0_05.as_ref()),
+                        10 => k_th_entry.and_then(|e| e.alpha_0_10.as_ref()),
                         _ => None,
                     };
 
@@ -566,9 +567,9 @@ fn main() {
                 let k_th_entry = qn1_th.and_then(|s| s.get(&format!("k_{}", k)));
                 for &alpha in &alphas {
                     let th_entry = match (alpha * 100.0).round() as usize {
-                        1 => k_th_entry.map(|e| &e.alpha_0_01),
-                        5 => k_th_entry.map(|e| &e.alpha_0_05),
-                        10 => k_th_entry.map(|e| &e.alpha_0_10),
+                        1 => k_th_entry.and_then(|e| e.alpha_0_01.as_ref()),
+                        5 => k_th_entry.and_then(|e| e.alpha_0_05.as_ref()),
+                        10 => k_th_entry.and_then(|e| e.alpha_0_10.as_ref()),
                         _ => None,
                     };
                     let tau = th_entry.map(|e| e.tau).unwrap_or(0.0);

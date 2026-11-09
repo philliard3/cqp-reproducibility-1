@@ -60,9 +60,15 @@ def generate_tpch_q10_dataset(
     seed: int = 42,
     stream_sort: str = "proxy",
     include_mc_bits: bool = True,
+    branching_mode: str = "uniform_tpch",
+    prob_mode: str = "uniform",
 ) -> Dict[str, Any]:
     """
     Generates a full synthetic probabilistic TPC-H Q10 dataset.
+
+    Ablation Parameters:
+    - branching_mode: "uniform_tpch" (Discrete Uniform U[1, 7], canonical default), "poisson4"
+    - prob_mode: "uniform" (Uniform U[0.10, 0.95], canonical default), "smooth_beta" (Beta(2, 3))
     """
     rng = np.random.Generator(np.random.PCG64(seed))
     n_groups = n_customers
@@ -89,8 +95,11 @@ def generate_tpch_q10_dataset(
     # Order dates across 365 days; Q4 is days [275, 365)
     order_dates = rng.integers(0, 365, size=n_orders)
 
-    # Lineitems per order: Poisson(4) clamped [1, 7]
-    n_items_per_order = np.clip(rng.poisson(4, size=n_orders), 1, 7)
+    # Lineitems per order: Discrete Uniform U[1, 7] (canonical TPC-H Section 4.2.2.13) or clamped Poisson(4)
+    if branching_mode in ["poisson4", "poisson"]:
+        n_items_per_order = np.clip(rng.poisson(4, size=n_orders), 1, 7)
+    else:
+        n_items_per_order = rng.integers(1, 8, size=n_orders)
 
     stream_tuples = []
     ground_truth_world_revenues = np.zeros((n_groups, n_mc_worlds), dtype=np.float64)
@@ -114,8 +123,11 @@ def generate_tpch_q10_dataset(
         # Probability of return request ~ 0.25
         is_return_req = rng.uniform(0.0, 1.0, size=n_lines) < 0.25
         
-        # Return refund likelihood p_return drawn from Beta(2, 3) shifted to [0.10, 0.95]
-        return_probs = 0.10 + rng.beta(2.0, 3.0, size=n_lines) * (0.95 - 0.10)
+        # Return refund likelihood p_return: Uniform U[0.10, 0.95] (canonical) or Beta(2, 3) (legacy)
+        if prob_mode in ["smooth_beta", "beta"]:
+            return_probs = 0.10 + rng.beta(2.0, 3.0, size=n_lines) * (0.95 - 0.10)
+        else:
+            return_probs = rng.uniform(0.10, 0.95, size=n_lines)
 
         for l_idx in range(n_lines):
             if not is_return_req[l_idx]:
